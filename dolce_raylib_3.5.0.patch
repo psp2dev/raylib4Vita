@@ -1,0 +1,894 @@
+diff --git a/src/Makefile b/src/Makefile
+index 193e3eb5..949512ee 100644
+--- a/src/Makefile
++++ b/src/Makefile
+@@ -11,6 +11,7 @@
+ #    PLATFORM_RPI:      Raspberry Pi (Raspbian)
+ #    PLATFORM_DRM:      Linux native mode, including Raspberry Pi 4 with V3D fkms driver
+ #    PLATFORM_WEB:      HTML5 (Chrome, Firefox)
++#    PLATFORM_VITA:     PlayStation Vita
+ #
+ #  Many thanks to Milan Nikolic (@gen2brain) for implementing Android platform pipeline.
+ #  Many thanks to Emanuele Petriglia for his contribution on GNU/Linux pipeline.
+@@ -66,12 +67,12 @@ RAYLIB_LIB_NAME      ?= raylib
+ RAYLIB_RES_FILE      ?= ./raylib.dll.rc.data
+ 
+ # Define raylib platform
+-# Options:  PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
+-PLATFORM             ?= PLATFORM_DESKTOP
++# Options:  PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB, PLATFORM_VITA
++PLATFORM             ?= PLATFORM_VITA
+ 
+ # Include raylib modules on compilation
+ # NOTE: Some programs like tools could not require those modules
+-RAYLIB_MODULE_AUDIO  ?= TRUE
++RAYLIB_MODULE_AUDIO  ?= FALSE
+ RAYLIB_MODULE_MODELS ?= TRUE
+ RAYLIB_MODULE_RAYGUI ?= FALSE
+ RAYLIB_MODULE_PHYSAC ?= FALSE
+@@ -81,7 +82,7 @@ RAYLIB_MODULE_PHYSAC_PATH ?= $(RAYLIB_SRC_PATH)
+ 
+ # Use external GLFW library instead of rglfw module
+ # TODO: Review usage of examples on Linux.
+-USE_EXTERNAL_GLFW    ?= FALSE
++USE_EXTERNAL_GLFW    ?= TRUE
+ 
+ # Use Wayland display server protocol on Linux desktop
+ # by default it uses X11 windowing system
+@@ -144,6 +145,9 @@ ifeq ($(PLATFORM),PLATFORM_DRM)
+         PLATFORM_OS = LINUX
+     endif
+ endif
++ifeq ($(PLATFORM),PLATFORM_VITA)
++	PLATFORM_OS = VITA
++endif
+ 
+ # RAYLIB_SRC_PATH adjustment for different platforms.
+ # If using GNU make, we can get the full path to the top of the tree. Windows? BSD?
+@@ -223,7 +227,9 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
+     # By default use OpenGL ES 2.0 on Android
+     GRAPHICS = GRAPHICS_API_OPENGL_ES2
+ endif
+-
++ifeq ($(PLATFORM),PLATFORM_VITA)
++    GRAPHICS = GRAPHICS_API_OPENGL_ES2
++endif
+ # Define default C compiler and archiver to pack library
+ CC = gcc
+ AR = ar
+@@ -272,6 +278,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
+     endif
+ endif
+ 
++ifeq ($(PLATFORM),PLATFORM_VITA)
++	CC = arm-dolce-eabi-gcc
++	AR = arm-dolce-eabi-ar
++endif
+ # Define compiler flags:
+ #  -O1                      defines optimization level
+ #  -g                       include debug information on compilation
+@@ -385,6 +395,10 @@ endif
+ # Define include paths for required headers
+ # NOTE: Several external required libraries (stb and others)
+ INCLUDE_PATHS = -I. -Iexternal/glfw/include -Iexternal/glfw/deps/mingw
++ifeq ($(PLATFORM),PLATFORM_VITA)
++	CFLAGS = -Wl,-q -Wall -Wno-incompatible-pointer-types -Wno-pointer-sign -O3 -nostartfiles -DVITA
++	INCLUDE_PATHS = -I.
++endif
+ 
+ ifeq ($(PLATFORM),PLATFORM_DESKTOP)
+     ifeq ($(PLATFORM_OS),BSD)
+@@ -549,7 +563,7 @@ else
+     else
+         # Compile raylib static library version $(RAYLIB_VERSION)
+         # WARNING: You should type "make clean" before doing this target.
+-		$(AR) rcs $(RAYLIB_RELEASE_PATH)/lib$(RAYLIB_LIB_NAME).a $(OBJS)
++		$(AR) rc $(RAYLIB_RELEASE_PATH)/lib$(RAYLIB_LIB_NAME).a $(OBJS)
+ 		@echo "raylib static library generated (lib$(RAYLIB_LIB_NAME).a) in $(RAYLIB_RELEASE_PATH)!"
+     endif
+ endif
+@@ -621,72 +635,32 @@ android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
+ # TODO: Add other platforms. Remove sudo requirement, i.e. add USER mode.
+ 
+ # RAYLIB_INSTALL_PATH should be the desired full path to libraylib. No relative paths.
+-DESTDIR ?= /usr/local
+-RAYLIB_INSTALL_PATH ?= $(DESTDIR)/lib
++PREFIX ?= $(DOLCESDK)/arm-dolce-eabi
++RAYLIB_INSTALL_PATH ?= $(DESTDIR)$(PREFIX)/lib
+ # RAYLIB_H_INSTALL_PATH locates the installed raylib header and associated source files.
+-RAYLIB_H_INSTALL_PATH ?= $(DESTDIR)/include
++RAYLIB_H_INSTALL_PATH ?= $(DESTDIR)$(PREFIX)/include
+ 
+ install :
+-ifeq ($(ROOT),root)
+-    ifeq ($(PLATFORM_OS),LINUX)
+-        # Attention! You are root, writing files to $(RAYLIB_INSTALL_PATH)
+-        # and $(RAYLIB_H_INSTALL_PATH). Consult this Makefile for more information.
+-        # Prepare the environment as needed.
+-		mkdir --parents --verbose $(RAYLIB_INSTALL_PATH)
+-		mkdir --parents --verbose $(RAYLIB_H_INSTALL_PATH)
+-        ifeq ($(RAYLIB_LIBTYPE),SHARED)
+-            # Installing raylib to $(RAYLIB_INSTALL_PATH).
+-			cp --update --verbose $(RAYLIB_RELEASE_PATH)/libraylib.so.$(RAYLIB_VERSION) $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_VERSION)
+-			cd $(RAYLIB_INSTALL_PATH); ln -fsv lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_VERSION) lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_API_VERSION)
+-			cd $(RAYLIB_INSTALL_PATH); ln -fsv lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_API_VERSION) lib$(RAYLIB_LIB_NAME).so
+-            # Uncomment to update the runtime linker cache with RAYLIB_INSTALL_PATH.
+-            # Not necessary if later embedding RPATH in your executable. See examples/Makefile.
+-			ldconfig $(RAYLIB_INSTALL_PATH)
+-        else
+-            # Installing raylib to $(RAYLIB_INSTALL_PATH).
+-			cp --update --verbose $(RAYLIB_RELEASE_PATH)/lib$(RAYLIB_LIB_NAME).a $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).a
+-        endif
+-        # Copying raylib development files to $(RAYLIB_H_INSTALL_PATH).
+-		cp --update raylib.h $(RAYLIB_H_INSTALL_PATH)/raylib.h
+-		cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
+-		cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
+-		cp --update physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
+-		@echo "raylib development files installed/updated!"
+-    else
+-		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
+-    endif
+-else
+-	@echo "Error: Root permissions needed for installation. Try sudo make install"
+-endif
++# Installing raylib to $(RAYLIB_INSTALL_PATH).
++	mkdir -p $(RAYLIB_INSTALL_PATH)
++	mkdir -p $(RAYLIB_H_INSTALL_PATH)
++	cp --update --verbose $(RAYLIB_RELEASE_PATH)/lib$(RAYLIB_LIB_NAME).a $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).a
++# Copying raylib development files to $(RAYLIB_H_INSTALL_PATH).
++	cp --update raylib.h $(RAYLIB_H_INSTALL_PATH)/raylib.h
++	cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
++	cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
++	cp --update physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
++	@echo "raylib development files installed/updated!"
+ 
+ # Remove raylib dev files installed on the system
+ # TODO: see 'install' target.
+ uninstall :
+-ifeq ($(ROOT),root)
+-    # WARNING: You are root, about to delete items from $(RAYLIB_INSTALL_PATH).
+-    # and $(RAYLIB_H_INSTALL_PATH). Please confirm each item.
+-    ifeq ($(PLATFORM_OS),LINUX)
+-        ifeq ($(RAYLIB_LIBTYPE),SHARED)
+-		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so
+-		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so.$(RAYLIB_API_VERSION)
+-		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so.$(RAYLIB_VERSION)
+-        # Uncomment to clean up the runtime linker cache. See install target.
+-		ldconfig
+-        else
+-		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.a
+-        endif
+-		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raylib.h
+-		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raymath.h
+-		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/rlgl.h
+-		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/physac.h
+-		@echo "raylib development files removed!"
+-        else
+-		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
+-    endif
+-else
+-	@echo "Error: Root permissions needed for uninstallation. Try sudo make uninstall"
+-endif
+-
++	rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.a
++	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raylib.h
++	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raymath.h
++	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/rlgl.h
++	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/physac.h
++	@echo "raylib development files removed!"
+ # Clean everything
+ clean:
+ ifeq ($(PLATFORM_OS),WINDOWS)
+diff --git a/src/camera.h b/src/camera.h
+index 4cc188c1..604188d2 100644
+--- a/src/camera.h
++++ b/src/camera.h
+@@ -102,7 +102,9 @@ extern "C" {            // Prevents name mangling of functions
+ // Global Variables Definition
+ //----------------------------------------------------------------------------------
+ //...
+-
++#if defined(PLATFORM_VITA)
++#define CAMERA_STANDALONE
++#endif
+ //----------------------------------------------------------------------------------
+ // Module Functions Declaration
+ //----------------------------------------------------------------------------------
+@@ -230,14 +232,14 @@ static CameraData CAMERA = {        // Global CAMERA state context
+ //----------------------------------------------------------------------------------
+ #if defined(CAMERA_STANDALONE)
+ // NOTE: Camera controls depend on some raylib input functions
+-static void EnableCursor() {}       // Unlock cursor
+-static void DisableCursor() {}      // Lock cursor
++void EnableCursor() {}       // Unlock cursor
++void DisableCursor() {}      // Lock cursor
+ 
+-static int IsKeyDown(int key) { return 0; }
++bool IsKeyDown(int key) { return 0; }
+ 
+-static int IsMouseButtonDown(int button) { return 0;}
+-static float GetMouseWheelMove() { return 0.0f; }
+-static Vector2 GetMousePosition() { return (Vector2){ 0.0f, 0.0f }; }
++bool IsMouseButtonDown(int button) { return 0;}
++float GetMouseWheelMove() { return 0.0f; }
++Vector2 GetMousePosition() { return (Vector2){ 0.0f, 0.0f }; }
+ #endif
+ 
+ //----------------------------------------------------------------------------------
+diff --git a/src/core.c b/src/core.c
+index e6d27e5f..16f89df4 100644
+--- a/src/core.c
++++ b/src/core.c
+@@ -12,6 +12,7 @@
+ *       - PLATFORM_DRM:     Linux native mode, including Raspberry Pi 4 with V3D fkms driver
+ *       - PLATFORM_WEB:     HTML5 with asm.js (Chrome, Firefox)
+ *       - PLATFORM_UWP:     Windows 10 App, Windows Phone, Xbox One
++*       - PLATFORM_VITA:    PlayStation Vita
+ *
+ *   CONFIGURATION:
+ *
+@@ -253,6 +254,14 @@
+     #include "uwp_events.h"             // UWP bootstrapping functions
+ #endif
+ 
++#if defined(PLATFORM_VITA)
++    #include <pib.h>
++    #include <psp2/kernel/processmgr.h>
++    #include "EGL/egl.h"
++    #include "EGL/eglext.h"
++    #include "GLES2/gl2.h"
++#endif
++
+ #if defined(PLATFORM_WEB)
+     #define GLFW_INCLUDE_ES2            // GLFW3: Enable OpenGL ES 2.0 (translated to WebGL)
+     #include <GLFW/glfw3.h>             // GLFW3 library: Windows, OpenGL context and Input management
+@@ -353,7 +362,7 @@ typedef struct CoreData {
+ #if defined(PLATFORM_RPI)
+         EGL_DISPMANX_WINDOW_T handle;       // Native window handle (graphic device)
+ #endif
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP) || defined(PLATFORM_VITA)
+ #if defined(PLATFORM_DRM)
+         int fd;                             // /dev/dri/... file descriptor
+         drmModeConnector *connector;        // Direct Rendering Manager (DRM) mode connector
+@@ -468,7 +477,7 @@ typedef struct CoreData {
+         double draw;                        // Time measure for frame draw
+         double frame;                       // Time measure for one frame
+         double target;                      // Desired time for one frame, if 0 not applied
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP) || defined(PLATFORM_VITA)
+         unsigned long long base;            // Base time measure for hi-res timer
+ #endif
+     } Time;
+@@ -647,6 +656,43 @@ static void RestoreTerminal(void)
+ #endif
+ // Initialize window and OpenGL context
+ // NOTE: data parameter could be used to pass any kind of required data to the initialization
++#if defined(PLATFORM_VITA)
++void InitWindow(int width, int height, const char *title)
++{
++    TRACELOG(LOG_INFO, "Initializing raylib %s", RAYLIB_VERSION);
++    if ((title != NULL) && (title[0] != 0)) CORE.Window.title = title;
++    // Init hi-res timer
++
++    InitTimer();
++    TRACELOG(LOG_INFO, "after timer ");
++
++    // Init graphics device (display device and OpenGL context)
++    // NOTE: returns true if window and graphic device has been initialized successfully
++    CORE.Window.ready = InitGraphicsDevice(width, height);
++    CORE.Window.screen.width = width;
++    CORE.Window.screen.height = height;
++    CORE.Window.currentFbo.width = width;
++    CORE.Window.currentFbo.height = height;
++    CORE.Input.Mouse.position.x = (float)CORE.Window.screen.width/2.0f;
++    CORE.Input.Mouse.position.y = (float)CORE.Window.screen.height/2.0f;
++    CORE.Input.Mouse.scale = (Vector2){ 1.0f, 1.0f };
++    
++
++    if (!CORE.Window.ready) return;
++
++#if defined(SUPPORT_DEFAULT_FONT)
++    // Load default font
++    // NOTE: External functions (defined in module: text)
++    LoadFontDefault();
++    Rectangle rec = GetFontDefault().recs[95];
++    // NOTE: We setup a 1px padding on char rectangle to avoid pixel bleeding on MSAA filtering
++    SetShapesTexture(GetFontDefault().texture, (Rectangle){ rec.x + 1, rec.y + 1, rec.width - 2, rec.height - 2 });
++#endif
++    //CORE.Input.Mouse.position.x = (float)CORE.Window.screen.width/2.0f;
++    //CORE.Input.Mouse.position.y = (float)CORE.Window.screen.height/2.0f;
++}
++
++#else
+ void InitWindow(int width, int height, const char *title)
+ {
+ #if defined(PLATFORM_UWP)
+@@ -794,7 +840,7 @@ void InitWindow(int width, int height, const char *title)
+     CORE.Input.Mouse.position.y = (float)CORE.Window.screen.height/2.0f;
+ #endif        // PLATFORM_ANDROID
+ }
+-
++#endif
+ // Close window and unload OpenGL context
+ void CloseWindow(void)
+ {
+@@ -942,7 +988,7 @@ bool WindowShouldClose(void)
+     else return true;
+ #endif
+ 
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP) || defined(PLATFORM_VITA)
+     if (CORE.Window.ready) return CORE.Window.shouldClose;
+     else return true;
+ #endif
+@@ -1672,7 +1718,7 @@ bool IsCursorHidden(void)
+ {
+     return CORE.Input.Mouse.cursorHidden;
+ }
+-
++#if !defined(PLATFORM_VITA)
+ // Enables cursor (unlock cursor)
+ void EnableCursor(void)
+ {
+@@ -1696,7 +1742,7 @@ void DisableCursor(void)
+ #endif
+     CORE.Input.Mouse.cursorHidden = true;
+ }
+-
++#endif
+ // Check if cursor is on the current screen.
+ bool IsCursorOnScreen(void)
+ {
+@@ -1767,8 +1813,9 @@ void EndDrawing(void)
+ #endif
+ 
+     SwapBuffers();                  // Copy back buffer to front buffer
++#if !defined(PLATFORM_VITA)
+     PollInputEvents();              // Poll user events
+-
++#endif
+     // Frame time control system
+     CORE.Time.current = GetTime();
+     CORE.Time.draw = CORE.Time.current - CORE.Time.previous;
+@@ -2144,6 +2191,10 @@ double GetTime(void)
+     return (double)(time - CORE.Time.base)*1e-9;  // Elapsed time since InitTimer()
+ #endif
+ 
++#if defined(PLATFORM_VITA)
++    return (double)(sceKernelGetProcessTimeWide() - CORE.Time.base)*1e-6;
++#endif
++
+ #if defined(PLATFORM_UWP)
+     return UWPGetQueryTimeFunc()();
+ #endif
+@@ -2391,7 +2442,11 @@ const char *GetWorkingDirectory(void)
+     static char currentDir[MAX_FILEPATH_LENGTH];
+     memset(currentDir, 0, MAX_FILEPATH_LENGTH);
+ 
++#if !defined(PLATFORM_VITA)
+     char *ptr = GETCWD(currentDir, MAX_FILEPATH_LENGTH - 1);
++#else
++    char *ptr = ".";
++#endif
+ 
+     return ptr;
+ }
+@@ -2450,8 +2505,11 @@ void ClearDirectoryFiles(void)
+ // Change working directory, returns true on success
+ bool ChangeDirectory(const char *dir)
+ {
++#if !defined(PLATFORM_VITA)
+     bool result = CHDIR(dir);
+-
++#else
++    bool result = 0;
++#endif
+     if (result != 0) TRACELOG(LOG_WARNING, "SYSTEM: Failed to change to directory: %s", dir);
+ 
+     return (result == 0);
+@@ -2675,6 +2733,7 @@ void OpenURL(const char *url)
+     }
+ }
+ 
++#if !defined(PLATFORM_VITA)
+ //----------------------------------------------------------------------------------
+ // Module Functions Definition - Input (Keyboard, Mouse, Gamepad) Functions
+ //----------------------------------------------------------------------------------
+@@ -3088,7 +3147,7 @@ Vector2 GetTouchPosition(int index)
+ 
+     return position;
+ }
+-
++#endif
+ //----------------------------------------------------------------------------------
+ // Module specific Functions Definition
+ //----------------------------------------------------------------------------------
+@@ -3097,6 +3156,171 @@ Vector2 GetTouchPosition(int index)
+ // NOTE: width and height represent the screen (framebuffer) desired size, not actual display size
+ // If width or height are 0, default display size will be used for framebuffer size
+ // NOTE: returns false in case graphic device could not be created
++#if defined(PLATFORM_VITA)
++static bool InitGraphicsDevice(int width, int height)
++{
++    CORE.Window.screen.width = width;            // User desired width
++    CORE.Window.screen.height = height;          // User desired height
++    CORE.Window.display.width = width;            // User desired width
++    CORE.Window.display.height = height;          // User desired height
++    CORE.Window.currentFbo.width = width;
++    CORE.Window.currentFbo.height = height;
++    CORE.Window.render.width = width;
++    CORE.Window.render.height = height;
++
++    CORE.Window.position.x = CORE.Window.display.width/2 - CORE.Window.screen.width/2;
++    CORE.Window.position.y = CORE.Window.display.height/2 - CORE.Window.screen.height/2;
++
++    CORE.Window.screenScale = MatrixIdentity();  // No draw scaling required by default
++
++    SetupFramebuffer(CORE.Window.display.width,CORE.Window.display.height);
++    
++    CORE.Window.fullscreen = true;
++
++    EGLint samples = 0;
++    EGLint sampleBuffer = 0;
++        TRACELOG(LOG_INFO, "after setugframebuffer");
++
++    if (CORE.Window.flags & FLAG_MSAA_4X_HINT)
++    {
++        samples = 4;
++        sampleBuffer = 1;
++        TRACELOG(LOG_INFO, "DISPLAY: Trying to enable MSAA x4");
++    }
++
++    const EGLint framebufferAttribs[] = {
++        //EGL_CONFIG_ID, 2,                         // You can always provide a configuration id. The one displayed here is Configuration 2
++        EGL_RED_SIZE, 8,                            // These four are always 8
++        EGL_GREEN_SIZE, 8,                          //
++        EGL_BLUE_SIZE, 8,                           //
++        EGL_ALPHA_SIZE, 8,                          //
++        EGL_DEPTH_SIZE, 32,                         // Depth is either 32 or 0
++        EGL_STENCIL_SIZE, 8,                        //  Stencil Size is either 8 or 0
++        EGL_SURFACE_TYPE, 5,                        // This is ALWAYS 5
++        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,    // Always EGL_OPENGL_ES2_BIT or 0x4
++        EGL_NONE};
++    
++    const EGLint contextAttribs[] =
++    {
++        EGL_CONTEXT_CLIENT_VERSION, 2,
++        EGL_NONE
++    };
++
++   /* const EGLint surfaceAttributes[] =
++    {
++        EGL_RENDER_BUFFER, EGL_BACK_BUFFER,
++        EGL_NONE,
++    };*/
++    EGLint numConfigs = 0;
++    CORE.Window.device = eglGetDisplay(0);
++        TRACELOG(LOG_INFO, "after eglgetdisplay ");
++
++    if (CORE.Window.device == EGL_NO_DISPLAY)
++    {
++        TRACELOG(LOG_WARNING, "DISPLAY: Failed to initialize EGL device");
++        return false;
++    }
++    EGLint majorVersion;
++    EGLint minorVersion;
++            TRACELOG(LOG_INFO, "before eglInitialize ");
++
++    // Initialize the EGL device connection
++    if (eglInitialize(CORE.Window.device, &majorVersion, &minorVersion) == EGL_FALSE)
++    {
++        // If all of the calls to eglInitialize returned EGL_FALSE then an error has occurred.
++        TRACELOG(LOG_WARNING, "DISPLAY: Failed to initialize EGL device");
++        return false;
++    }
++    TRACELOG(LOG_INFO,"DISPLAY: EGL version major:%d, minor:%d",majorVersion,minorVersion);   
++    int ret=eglBindAPI(EGL_OPENGL_ES_API);
++    if(!ret)
++    {
++        ret=eglGetError();
++        TRACELOG(LOG_ERROR,"DISPLAY:  eglBindAPI failed: 0x%08X",ret);
++        return false;
++    }
++    TRACELOG(LOG_INFO,"DISPLAY: eglBindAPI success.");
++    
++    /*ret=eglSwapInterval(CORE.Window.device,0);
++    if(!ret)
++    {
++        ret=eglGetError();
++        TRACELOG(LOG_ERROR,"DISPLAY: eglSwapInterval failed: 0x%08X",ret);
++        //return false;
++    }
++    //TRACELOG(LOG_INFO,"DISPLAY: eglSwapInterval success.");*/
++    ret=eglChooseConfig(CORE.Window.device, framebufferAttribs, &CORE.Window.config, 1, &numConfigs);
++    if(!ret)
++    {
++        ret=eglGetError();
++        TRACELOG(LOG_ERROR,"DISPLAY: eglChooseConfig failed: 0x%08X",ret);
++        return false;
++    }
++    if (numConfigs!=1)
++    {
++        TRACELOG(LOG_ERROR,"DISPLAY: No available configuration found.");
++        return false;
++    }
++    TRACELOG(LOG_INFO,"DISPLAY: eglChooseConfig success.");
++    
++
++    CORE.Window.surface=eglCreateWindowSurface(CORE.Window.device, CORE.Window.config, VITA_WINDOW_960X544, NULL);
++    if(CORE.Window.surface==EGL_NO_SURFACE)
++    {
++        ret=eglGetError();
++        TRACELOG(LOG_ERROR,"DISPLAY: eglCreateWindowSurface failed: 0x%08X",ret);
++        return false;
++    }
++    TRACELOG(LOG_INFO,"DISPLAY: eglCreateWindowSurface success.");
++// Create an EGL rendering context
++    CORE.Window.context = eglCreateContext(CORE.Window.device, CORE.Window.config, EGL_NO_CONTEXT, contextAttribs);
++    if (CORE.Window.context == EGL_NO_CONTEXT)
++    {
++        ret=eglGetError();
++        TRACELOG(LOG_ERROR,"DISPLAY: Failed to create EGL context 0x%08X",ret);
++        return false;
++    }
++    TRACELOG(LOG_INFO,"DISPLAY: context create EGL window surface");
++    EGLint surface_width, surface_height;
++    if (eglMakeCurrent(CORE.Window.device, CORE.Window.surface, CORE.Window.surface, CORE.Window.context) == EGL_FALSE)
++    {
++        ret=eglGetError();
++        TRACELOG(LOG_ERROR,"DISPLAY: Failed to attach EGL rendering context to EGL surface 0x%08X");
++        return false;
++    }
++    TRACELOG(LOG_INFO,"DISPLAY: eglMakeCurrent success.\n");
++
++    eglQuerySurface(CORE.Window.device, CORE.Window.surface, EGL_WIDTH, &surface_width);
++    eglQuerySurface(CORE.Window.device, CORE.Window.surface, EGL_HEIGHT, &surface_height);
++    printf("Surface Width: %d, Surface Height: %d\n", surface_width, surface_height);
++
++
++    //const char *gl_exts = (char *) glGetString(GL_EXTENSIONS);
++    //TRACELOG(LOG_INFO,"DISPLAY: GL_VENDOR:   \"%s\"\n", glGetString(GL_VENDOR));
++    //TRACELOG(LOG_INFO,"DISPLAY: GL_VERSION:  \"%s\"\n", glGetString(GL_VERSION));
++    //TRACELOG(LOG_INFO,"DISPLAY: GL_RENDERER: \"%s\"\n", glGetString(GL_RENDERER));
++    //TRACELOG(LOG_INFO,"DISPLAY: SL_VERSION:  \"%s\"\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
++    //TRACELOG(LOG_INFO,"DISPLAY: GL_EXTs:     \"%s\"\n",glGetString(GL_SHADING_LANGUAGE_VERSION));
++    
++    rlglInit(CORE.Window.screen.width, CORE.Window.screen.height);
++
++    int fbWidth = CORE.Window.render.width;
++    int fbHeight = CORE.Window.render.height;
++
++
++
++    // Setup default viewport
++    SetupViewport(fbWidth, fbHeight);
++
++    CORE.Window.currentFbo.width = CORE.Window.screen.width;
++    CORE.Window.currentFbo.height = CORE.Window.screen.height;
++
++    ClearBackground(RAYWHITE);      // Default background color for raylib games :P
++
++    //CORE.Window.ready=true;
++    return true;
++}
++#else
+ static bool InitGraphicsDevice(int width, int height)
+ {
+     CORE.Window.screen.width = width;            // User desired width
+@@ -3976,7 +4200,7 @@ static bool InitGraphicsDevice(int width, int height)
+ 
+     return true;
+ }
+-
++#endif
+ // Set viewport for a provided width and height
+ static void SetupViewport(int width, int height)
+ {
+@@ -4095,6 +4319,9 @@ static void InitTimer(void)
+     }
+     else TRACELOG(LOG_WARNING, "TIMER: Hi-resolution timer not available");
+ #endif
++#if defined(PLATFORM_VITA)
++    CORE.Time.base=sceKernelGetProcessTimeWide();
++#endif
+ 
+     CORE.Time.previous = GetTime();       // Get time as double
+ }
+@@ -4429,7 +4656,7 @@ static void SwapBuffers(void)
+     glfwSwapBuffers(CORE.Window.handle);
+ #endif
+ 
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP) || defined(PLATFORM_VITA)
+     eglSwapBuffers(CORE.Window.device, CORE.Window.surface);
+ 
+ #if defined(PLATFORM_DRM)
+diff --git a/src/models.c b/src/models.c
+index 2e72b64e..de37a9d3 100644
+--- a/src/models.c
++++ b/src/models.c
+@@ -3038,8 +3038,9 @@ static Model LoadOBJ(const char *fileName)
+         unsigned int dataSize = (unsigned int)strlen(fileData);
+         char currentDir[1024] = { 0 };
+         strcpy(currentDir, GetWorkingDirectory());
++#if !defined(PLATFORM_VITA)     
+         chdir(GetDirectoryPath(fileName));
+-
++#endif
+         unsigned int flags = TINYOBJ_FLAG_TRIANGULATE;
+         int ret = tinyobj_parse_obj(&attrib, &meshes, &meshCount, &materials, &materialCount, fileData, dataSize, flags);
+ 
+@@ -3176,8 +3177,9 @@ static Model LoadOBJ(const char *fileName)
+         RL_FREE(vtCount);
+         RL_FREE(vnCount);
+         RL_FREE(faceCount);
+-
++#if !defined(PLATFORM_VITA)
+         chdir(currentDir);
++#endif
+     }
+ 
+     return model;
+diff --git a/src/rlgl.h b/src/rlgl.h
+index 1b42c641..1fa7f480 100644
+--- a/src/rlgl.h
++++ b/src/rlgl.h
+@@ -2517,6 +2517,7 @@ void rlLoadMesh(Mesh *mesh, bool dynamic)
+     glEnableVertexAttribArray(1);
+ 
+     // Enable vertex attributes: normals (shader-location = 2)
++#if !defined(PLATFORM_VITA)
+     if (mesh->normals != NULL)
+     {
+         glGenBuffers(1, &mesh->vboId[2]);
+@@ -2531,7 +2532,7 @@ void rlLoadMesh(Mesh *mesh, bool dynamic)
+         glVertexAttrib3f(2, 1.0f, 1.0f, 1.0f);
+         glDisableVertexAttribArray(2);
+     }
+-
++#endif
+     // Default color vertex attribute (shader-location = 3)
+     if (mesh->colors != NULL)
+     {
+@@ -4146,7 +4147,33 @@ static Shader LoadShaderDefault(void)
+ 
+     // NOTE: All locations must be reseted to -1 (no location)
+     for (int i = 0; i < MAX_SHADER_LOCATIONS; i++) shader.locs[i] = -1;
+-
++#if defined (PLATFORM_VITA)
++const char *defaultVShaderStr =
++    "void main(                         \n"
++    "float3 vertexPosition,             \n"
++    "float2 vertexTexCoord,             \n"
++    "float4 vertexColor,                \n"
++    "float2 out fragTexCoord : TEXCOORD0,\n"
++    "float4 out fragColor : COLOR0,      \n"
++    "float4 out gl_Position : POSITION, \n"
++    "uniform float4x4 mvp)              \n"
++    "{                                  \n"
++    "    fragTexCoord = vertexTexCoord; \n"
++    "    fragColor = vertexColor;       \n"
++    "    gl_Position = mul(float4(vertexPosition,1.f),mvp); \n"
++    "}                                  \n";
++    const char *defaultFShaderStr =
++    "void main(                       \n"
++    "float2 fragTexCoord : TEXCOORD0,   \n"
++    "float4 fragColor : COLOR0,                  \n"
++    "uniform sampler2D texture0,        \n"
++    "uniform float4 colDiffuse,        \n"
++    "float4 out finalColor)         \n"
++    "{                                  \n"
++    "    float4 texelColor = tex2D(texture0, fragTexCoord); \n" 
++    "    finalColor=texelColor*colDiffuse*fragColor;      \n"
++    "}                                  \n";
++#else
+     // Vertex shader directly defined, no external file required
+     const char *defaultVShaderStr =
+ #if defined(GRAPHICS_API_OPENGL_21)
+@@ -4205,7 +4232,7 @@ static Shader LoadShaderDefault(void)
+     "    finalColor = texelColor*colDiffuse*fragColor;        \n"
+ #endif
+     "}                                  \n";
+-
++#endif
+     // NOTE: Compiled vertex/fragment shaders are kept for re-use
+     RLGL.State.defaultVShaderId = CompileShader(defaultVShaderStr, GL_VERTEX_SHADER);     // Compile default vertex shader
+     RLGL.State.defaultFShaderId = CompileShader(defaultFShaderStr, GL_FRAGMENT_SHADER);   // Compile default fragment shader
+diff --git a/src/utils.c b/src/utils.c
+index b9e24b02..7da9ee7e 100644
+--- a/src/utils.c
++++ b/src/utils.c
+@@ -110,6 +110,166 @@ void SetTraceLogCallback(TraceLogCallback callback)
+ }
+ 
+ // Show trace log messages (LOG_INFO, LOG_WARNING, LOG_ERROR, LOG_DEBUG)
++#if defined(PLATFORM_VITA)
++#include <psp2/net.h>
++#include <psp2/libnetctl.h>
++#include <psp2/types.h>
++#include <psp2/kernel/clib.h>
++#include <psp2/sysmodule.h>
++static void *net_memory = NULL;
++static SceNetInAddr vita_addr;
++struct SceNetSockaddrIn stSockAddr;
++int debugnet_initialized;
++int SocketFD;
++#define NET_INIT_SIZE 1*1024*1024
++
++/**
++ * UDP printf for debugnet library,
++ * use debugNetPrintf() instead unless necessary
++ *
++ * @par Example:
++ * @code
++ * debugNetUDPPrintf("This is a %s test\n", "real");
++ * @endcode
++ */
++void debugNetUDPPrintf(const char* fmt, ...)
++{
++  char buffer[1024];
++  va_list arg;
++  va_start(arg, fmt);
++  sceClibVsnprintf(buffer, sizeof(buffer), fmt, arg);
++  va_end(arg);
++  
++  debugNetUDPSend(buffer);
++}
++/**
++ * UDP Raw text send for debugnet library,
++ * use debugNetPrintf() instead unless necessary
++ *
++ * @par Example:
++ * @code
++ * debugNetUDPSend("This is a test\n");
++ * @endcode
++ *
++ * @param text - NULL-terminated buffer containing the raw text to send
++ */
++void debugNetUDPSend(const char *text)
++{
++    sceNetSend(SocketFD, text, strlen(text), 0);
++}
++/**
++ * Init debugnet library 
++ *
++ * @par Example:
++ * @code
++ * #define LOGLEVEL 3  
++ * int ret;
++ * ret = debugNetInit("172.26.0.2", 18194, DEBUG);
++ * @endcode
++ *
++ * @param serverIP - your pc/mac server ip
++ * @param port - udp port server
++ * @param level - DEBUG,ERROR,INFO or NONE 
++ */
++int debugNetInit(const char *serverIp, int port, int level)
++{
++    int ret=0;
++    SceNetInitParam initparam;
++    SceNetCtlInfo info;
++    
++    
++    
++    //debugNetSetLogLevel(level);
++    
++    
++    if (sceSysmoduleIsLoaded(SCE_SYSMODULE_NET) != SCE_SYSMODULE_LOADED)
++    ret=sceSysmoduleLoadModule(SCE_SYSMODULE_NET);
++    
++    if (ret >=0) 
++    {
++        
++    
++    /*net initialazation code from xerpi at https://github.com/xerpi/FTPVita/blob/master/ftp.c*/
++    /* Init Net */
++    if (sceNetShowNetstat() == SCE_NET_ERROR_ENOTINIT) {
++        net_memory = malloc(NET_INIT_SIZE);
++
++        initparam.memory = net_memory;
++        initparam.size = NET_INIT_SIZE;
++        initparam.flags = 0;
++
++        ret = sceNetInit(&initparam);
++        //printf("sceNetInit(): 0x%08X\n", ret);
++    } else {
++        //printf("Net is already initialized.\n");
++    }
++
++    /* Init NetCtl */
++    ret = sceNetCtlInit();
++    //printf("sceNetCtlInit(): 0x%08X\n", ret);
++   
++
++    /* Get IP address */
++    ret = sceNetCtlInetGetInfo(SCE_NET_CTL_INFO_IP_CONFIG, &info);
++    //printf("sceNetCtlInetGetInfo(): 0x%08X\n", ret);
++
++
++    /* Save the IP of PSVita to a global variable */
++    sceNetInetPton(SCE_NET_AF_INET, info.ip_address, &vita_addr);
++    
++    /* Create datagram udp socket*/
++    SocketFD = sceNetSocket("debugnet_socket",
++        SCE_NET_AF_INET , SCE_NET_SOCK_DGRAM, SCE_NET_IPPROTO_UDP);
++   
++    memset(&stSockAddr, 0, sizeof stSockAddr);
++    
++    
++    /*Populate SceNetSockaddrIn structure values*/
++    stSockAddr.sin_family = SCE_NET_AF_INET;
++    stSockAddr.sin_port = sceNetHtons(port);
++    sceNetInetPton(SCE_NET_AF_INET, serverIp, &stSockAddr.sin_addr);
++
++    /*Connect socket to server*/
++    sceNetConnect(SocketFD, (struct SceNetSockaddr *)&stSockAddr, sizeof stSockAddr);
++
++    /*Show log on pc/mac side*/
++    debugNetUDPPrintf("[VITA][INFO]:debugnet initialized\n");
++    debugNetUDPPrintf("[VITA][INFO]:Copyright (C) 2010,2020 Antonio Jose Ramos Marquez aka bigboss @psxdev\n");
++    debugNetUDPPrintf("[VITA][INFO]:ready to have a lot of fun...\n");
++
++    /*library debugnet initialized*/
++    debugnet_initialized = 1;
++    }
++
++    return debugnet_initialized;
++}
++
++void TraceLog(int logType, const char *text, ...)
++{
++    // Message has level below current threshold, don't emit
++    if (logType < logTypeLevel) return;
++
++    char buffer[1024] = { 0 };
++    va_list args;
++    
++    va_start(args, text);
++       
++    sceClibVsnprintf(buffer,1024, text, args);
++    buffer[1024-1] = 0;
++    va_end(args);
++
++    switch (logType)
++    {
++        case LOG_TRACE: debugNetUDPPrintf("[VITA][TRACE]: %s\n",buffer); break;
++        case LOG_DEBUG: debugNetUDPPrintf("[VITA][DEBUG]: %s\n",buffer); break;
++        case LOG_INFO: debugNetUDPPrintf("[VITA][INFO]: %s\n",buffer); break;
++        case LOG_WARNING: debugNetUDPPrintf("[VITA][WARNING]: %s\n",buffer); break;
++        case LOG_ERROR: debugNetUDPPrintf("[VITA][ERROR]: %s\n",buffer); break;
++        case LOG_FATAL: debugNetUDPPrintf("[VITA][FATAL]: %s\n",buffer); break;
++        default: break;
++    }
++}
++#else
+ void TraceLog(int logType, const char *text, ...)
+ {
+ #if defined(SUPPORT_TRACELOG)
+@@ -162,7 +322,7 @@ void TraceLog(int logType, const char *text, ...)
+ 
+ #endif  // SUPPORT_TRACELOG
+ }
+-
++#endif
+ // Internal memory allocator
+ void *MemAlloc(int size)
+ {
+diff --git a/src/utils.h b/src/utils.h
+index 40ee53a4..675b4dca 100644
+--- a/src/utils.h
++++ b/src/utils.h
+@@ -52,6 +52,12 @@
+     #define fopen(name, mode) android_fopen(name, mode)
+ #endif
+ 
++#if defined(PLATFORM_VITA)
++int debugNetInit(const char *serverIp, int port, int level);
++void debugNetUDPSend(const char *text);
++void debugNetUDPPrintf(const char *format, ...);
++#define debugNetPrintf TRACELOG
++#endif
+ //----------------------------------------------------------------------------------
+ // Types and Structures Definition
+ //----------------------------------------------------------------------------------

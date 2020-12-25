@@ -1,0 +1,24 @@
+pkgname=raylib4Vita
+pkgver=3.5.0
+pkgrel=1
+url="https://github.com/raysan5/raylib/"
+source=("https://github.com/raysan5/raylib/archive/$pkgver.tar.gz" 'dolce_raylib_3.5.0.patch')
+sha256sums=(761985876092fa98a99cbf1fef7ca80c3ee0365fb6a107ab901a272178ba69f5 SKIP)
+
+prepare() {
+  mv raylib-$pkgver $pkgname-$pkgver
+  cd $pkgname-$pkgver
+  patch --strip=1 --input="${srcdir}/dolce_raylib_3.5.0.patch"
+}
+
+build() {
+  cd $pkgname-$pkgver
+  cd src
+  make -j$(nproc)
+}
+
+package () {
+  cd $pkgname-$pkgver
+  cd src
+  make DESTDIR=$pkgdir install
+}
