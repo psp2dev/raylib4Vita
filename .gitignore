@@ -1,0 +1,11 @@
+*.exe
+*.elf
+*.velf
+*.self
+*.pkg
+*.vpk
+*.o
+*.a
+*.d
+.DS_Store
+._*
