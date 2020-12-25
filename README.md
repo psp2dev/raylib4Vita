@@ -25,7 +25,7 @@ Ready to learn?
 ===========================
   
  - @raysan5 for his amazing work with raylib and raylib has an incredible community developing in the open way!!!!
- - 
+ - @frangar @fjtrujy @psxdev aka "los nenes"
  
   License
 ===========================
