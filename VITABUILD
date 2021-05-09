@@ -1,14 +1,15 @@
 pkgname=raylib4Vita
-pkgver=3.5.0
+pkgver=3.7.0
+gitrev=2565c011580fda074e0f3dceacd5e6a1476b3284
 pkgrel=1
 url="https://github.com/raysan5/raylib/"
-source=("https://github.com/raysan5/raylib/archive/$pkgver.tar.gz" 'dolce_raylib_3.5.0.patch')
-sha256sums=(761985876092fa98a99cbf1fef7ca80c3ee0365fb6a107ab901a272178ba69f5 SKIP)
+source=("https://github.com/raysan5/raylib/archive/$gitrev.tar.gz" 'vitasdk_raylib_3.7.0.patch')
+sha256sums=(SKIP SKIP)
 
 prepare() {
-  mv raylib-$pkgver $pkgname-$pkgver
+  mv raylib-$gitrev $pkgname-$pkgver
   cd $pkgname-$pkgver
-  patch --strip=1 --input="${srcdir}/dolce_raylib_3.5.0.patch"
+  patch --strip=1 --input="${srcdir}/vitasdk_raylib_3.7.0.patch"
 }
 
 build() {

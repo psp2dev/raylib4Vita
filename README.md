@@ -1,9 +1,14 @@
 # raylib4Vita
 raylib4Vita is a raylib port for PlayStation Vita
 
-Master branch is for dolcesdk, use vitasdk branch for vitasdk
+Ready to have a lot of fun?
+- Install your vitasdk environment check https://vitasdk.org/
+- clone this repository and execute vita-makepkg
+- Install raylib4vita pkg with tar -C $VITASDK/arm-vita-eabi/ -xvf raylib4Vita-3.7.0-1-arm.tar.xz
 
-<img align="left" src="https://github.com/raysan5/raylib/blob/master/logo/raylib_256x256.png" width=256>
+
+<img align="left" src="https://github.com/raysan5/raylib/blob/master/logo/raylib_logo_animation.gif" width="288px">
+
 
 **raylib4Vita is based on raylib is a simple and easy-to-use library to enjoy videogames programming.**
 
@@ -18,6 +23,7 @@ Ready to learn?
 
  Change log
 ===========================
+ - 9/5/2021 public release using raylib 3.7.0 for vitasdk 
  - 25/12/2020 Initial public release celebrating raylib 3.5.0 release 
  
 
