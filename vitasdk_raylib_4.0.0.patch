@@ -1,5 +1,5 @@
 diff --git a/src/Makefile b/src/Makefile
-index a4a943d6..86143a1e 100644
+index 6fbb8a3f..d3306919 100644
 --- a/src/Makefile
 +++ b/src/Makefile
 @@ -11,6 +11,7 @@
@@ -10,13 +10,11 @@ index a4a943d6..86143a1e 100644
  #
  #  Many thanks to Milan Nikolic (@gen2brain) for implementing Android platform pipeline.
  #  Many thanks to Emanuele Petriglia for his contribution on GNU/Linux pipeline.
-@@ -66,12 +67,12 @@ RAYLIB_LIB_NAME      ?= raylib
- RAYLIB_RES_FILE      ?= ./raylib.dll.rc.data
+@@ -67,20 +68,21 @@ RAYLIB_RES_FILE      ?= ./raylib.dll.rc.data
  
  # Define raylib platform
--# Options:  PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
+ # Options:  PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
 -PLATFORM             ?= PLATFORM_DESKTOP
-+# Options:  PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB, PLATFORM_VITA
 +PLATFORM             ?= PLATFORM_VITA
  
  # Include raylib modules on compilation
@@ -26,26 +24,29 @@ index a4a943d6..86143a1e 100644
  RAYLIB_MODULE_MODELS ?= TRUE
  RAYLIB_MODULE_RAYGUI ?= FALSE
  RAYLIB_MODULE_PHYSAC ?= FALSE
-@@ -81,7 +82,7 @@ RAYLIB_MODULE_PHYSAC_PATH ?= $(RAYLIB_SRC_PATH)
++RAYLIB_MODULE_SPINE  ?= FALSE
+ 
+ RAYLIB_MODULE_RAYGUI_PATH ?= $(RAYLIB_SRC_PATH)/extras
+ RAYLIB_MODULE_PHYSAC_PATH ?= $(RAYLIB_SRC_PATH)/extras
  
  # Use external GLFW library instead of rglfw module
- # TODO: Review usage of examples on Linux.
 -USE_EXTERNAL_GLFW    ?= FALSE
 +USE_EXTERNAL_GLFW    ?= TRUE
  
  # Use Wayland display server protocol on Linux desktop
  # by default it uses X11 windowing system
-@@ -144,6 +145,9 @@ ifeq ($(PLATFORM),PLATFORM_DRM)
+@@ -143,7 +145,9 @@ ifeq ($(PLATFORM),PLATFORM_DRM)
          PLATFORM_OS = LINUX
      endif
  endif
+-
 +ifeq ($(PLATFORM),PLATFORM_VITA)
 +    PLATFORM_OS = VITA
 +endif
- 
  # RAYLIB_SRC_PATH adjustment for different platforms.
  # If using GNU make, we can get the full path to the top of the tree. Windows? BSD?
-@@ -223,7 +227,9 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
+ # Required for ldconfig or other tools that do not perform path expansion.
+@@ -222,7 +226,9 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
      # By default use OpenGL ES 2.0 on Android
      GRAPHICS = GRAPHICS_API_OPENGL_ES2
  endif
@@ -56,9 +57,9 @@ index a4a943d6..86143a1e 100644
  # Define default C compiler and archiver to pack library
  CC = gcc
  AR = ar
-@@ -271,7 +277,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
-         AR = $(ANDROID_TOOLCHAIN)/bin/x86_64-linux-android-ar
-     endif
+@@ -262,7 +268,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
+     # It seems from Android NDK r22 onwards we need to use llvm-ar
+     AR = $(ANDROID_TOOLCHAIN)/bin/llvm-ar
  endif
 -
 +ifeq ($(PLATFORM),PLATFORM_VITA)
@@ -68,7 +69,7 @@ index a4a943d6..86143a1e 100644
  # Define compiler flags:
  #  -O1                      defines optimization level
  #  -g                       include debug information on compilation
-@@ -385,7 +394,10 @@ endif
+@@ -376,7 +385,10 @@ endif
  # Define include paths for required headers
  # NOTE: Several external required libraries (stb and others)
  INCLUDE_PATHS = -I. -Iexternal/glfw/include -Iexternal/glfw/deps/mingw
@@ -80,7 +81,18 @@ index a4a943d6..86143a1e 100644
  ifeq ($(PLATFORM),PLATFORM_DESKTOP)
      ifeq ($(PLATFORM_OS),BSD)
          INCLUDE_PATHS += -I/usr/local/include
-@@ -549,7 +561,7 @@ else
+@@ -470,6 +482,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
+     OBJS += android_native_app_glue.o
+ endif
+ 
++ifeq ($(RAYLIB_MODULE_SPINE),TRUE)
++    OBJS += rspine.o
++endif
++
+ # Default target entry
+ all: raylib
+ 
+@@ -540,7 +556,7 @@ else
      else
          # Compile raylib static library version $(RAYLIB_VERSION)
          # WARNING: You should type "make clean" before doing this target.
@@ -89,161 +101,71 @@ index a4a943d6..86143a1e 100644
  		@echo "raylib static library generated (lib$(RAYLIB_LIB_NAME).a) in $(RAYLIB_RELEASE_PATH)!"
      endif
  endif
-@@ -599,9 +611,10 @@ raygui.c:
- # Compile physac module
- # NOTE: physac header should be distributed with raylib.h
- physac.o : physac.c physac.h
--	@echo #define PHYSAC_IMPLEMENTATION > physac.c
--	@echo #include "$(RAYLIB_MODULE_PHYSAC_PATH)/physac.h" > physac.c
- 	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -D$(PLATFORM) -DPHYSAC_IMPLEMENTATION
-+physac.c:
-+	@echo '#define PHYSAC_IMPLEMENTATION' > physac.c
-+	@echo '#include "$(RAYLIB_MODULE_PHYSAC_PATH)/physac.h"' >> physac.c
- 
- # Compile android_native_app_glue module
+@@ -599,6 +615,9 @@ physac.c:
  android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
-@@ -621,72 +634,34 @@ android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
+ 	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
+ 
++# Compile spine module
++rspine.o : rspine.c raylib.h rlgl.h raymath.h utils.h
++	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -D$(PLATFORM) -D$(GRAPHICS)
+ 
+ # Install generated and needed files to desired directories.
+ # On GNU/Linux and BSDs, there are some standard directories that contain extra
+@@ -613,10 +632,12 @@ android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
  # TODO: Add other platforms. Remove sudo requirement, i.e. add USER mode.
  
  # RAYLIB_INSTALL_PATH should be the desired full path to libraylib. No relative paths.
 -DESTDIR ?= /usr/local
 -RAYLIB_INSTALL_PATH ?= $(DESTDIR)/lib
-+
-+#DESTDIR ?= /usr/local
++#DESTDIR ?=  $(VITASDK)/arm-vita-eabi
 +PREFIX ?= $(VITASDK)/arm-vita-eabi
++
 +RAYLIB_INSTALL_PATH ?= $(DESTDIR)$(PREFIX)/lib
  # RAYLIB_H_INSTALL_PATH locates the installed raylib header and associated source files.
 -RAYLIB_H_INSTALL_PATH ?= $(DESTDIR)/include
 +RAYLIB_H_INSTALL_PATH ?= $(DESTDIR)$(PREFIX)/include
  
  install :
--ifeq ($(ROOT),root)
--    ifeq ($(PLATFORM_OS),LINUX)
--        # Attention! You are root, writing files to $(RAYLIB_INSTALL_PATH)
--        # and $(RAYLIB_H_INSTALL_PATH). Consult this Makefile for more information.
--        # Prepare the environment as needed.
--		mkdir --parents --verbose $(RAYLIB_INSTALL_PATH)
--		mkdir --parents --verbose $(RAYLIB_H_INSTALL_PATH)
--        ifeq ($(RAYLIB_LIBTYPE),SHARED)
--            # Installing raylib to $(RAYLIB_INSTALL_PATH).
--			cp --update --verbose $(RAYLIB_RELEASE_PATH)/libraylib.so.$(RAYLIB_VERSION) $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_VERSION)
--			cd $(RAYLIB_INSTALL_PATH); ln -fsv lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_VERSION) lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_API_VERSION)
--			cd $(RAYLIB_INSTALL_PATH); ln -fsv lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_API_VERSION) lib$(RAYLIB_LIB_NAME).so
--            # Uncomment to update the runtime linker cache with RAYLIB_INSTALL_PATH.
--            # Not necessary if later embedding RPATH in your executable. See examples/Makefile.
--			ldconfig $(RAYLIB_INSTALL_PATH)
--        else
--            # Installing raylib to $(RAYLIB_INSTALL_PATH).
--			cp --update --verbose $(RAYLIB_RELEASE_PATH)/lib$(RAYLIB_LIB_NAME).a $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).a
--        endif
--        # Copying raylib development files to $(RAYLIB_H_INSTALL_PATH).
--		cp --update raylib.h $(RAYLIB_H_INSTALL_PATH)/raylib.h
--		cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
--		cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
--		cp --update physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
--		@echo "raylib development files installed/updated!"
--    else
--		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
--    endif
--else
+ ifeq ($(ROOT),root)
+@@ -648,7 +669,15 @@ ifeq ($(ROOT),root)
+ 		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
+     endif
+ else
 -	@echo "Error: Root permissions needed for installation. Try sudo make install"
--endif
-+# Installing raylib to $(RAYLIB_INSTALL_PATH).
 +	mkdir -p $(RAYLIB_INSTALL_PATH)
 +	mkdir -p $(RAYLIB_H_INSTALL_PATH)
 +	cp --update --verbose $(RAYLIB_RELEASE_PATH)/lib$(RAYLIB_LIB_NAME).a $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).a
-+# Copying raylib development files to $(RAYLIB_H_INSTALL_PATH).
 +	cp --update raylib.h $(RAYLIB_H_INSTALL_PATH)/raylib.h
 +	cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
 +	cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
-+	cp --update physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
++	cp --update rayspine.h $(RAYLIB_H_INSTALL_PATH)/rayspine.h
++	cp --update extras/physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
 +	@echo "raylib development files installed/updated!"
+ endif
  
  # Remove raylib dev files installed on the system
- # TODO: see 'install' target.
- uninstall :
--ifeq ($(ROOT),root)
--    # WARNING: You are root, about to delete items from $(RAYLIB_INSTALL_PATH).
--    # and $(RAYLIB_H_INSTALL_PATH). Please confirm each item.
--    ifeq ($(PLATFORM_OS),LINUX)
--        ifeq ($(RAYLIB_LIBTYPE),SHARED)
--		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so
--		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so.$(RAYLIB_API_VERSION)
--		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so.$(RAYLIB_VERSION)
--        # Uncomment to clean up the runtime linker cache. See install target.
--		ldconfig
--        else
--		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.a
--        endif
--		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raylib.h
--		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raymath.h
--		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/rlgl.h
--		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/physac.h
--		@echo "raylib development files removed!"
--        else
--		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
--    endif
--else
+@@ -676,7 +705,12 @@ ifeq ($(ROOT),root)
+ 		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
+     endif
+ else
 -	@echo "Error: Root permissions needed for uninstallation. Try sudo make uninstall"
--endif
--
-+	rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.a
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raylib.h
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raymath.h
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/rlgl.h
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/physac.h
-+	@echo "raylib development files removed!"
- # Clean everything
- clean:
- ifeq ($(PLATFORM_OS),WINDOWS)
-diff --git a/src/camera.h b/src/camera.h
-index cd42b54b..7bf89401 100644
---- a/src/camera.h
-+++ b/src/camera.h
-@@ -102,7 +102,9 @@ extern "C" {            // Prevents name mangling of functions
- // Global Variables Definition
- //----------------------------------------------------------------------------------
- //...
--
-+#if defined(PLATFORM_VITA)
-+#define CAMERA_STANDALONE
-+#endif
- //----------------------------------------------------------------------------------
- // Module Functions Declaration
- //----------------------------------------------------------------------------------
-@@ -228,6 +230,16 @@ static CameraData CAMERA = {        // Global CAMERA state context
- //----------------------------------------------------------------------------------
- // Module specific Functions Declaration
- //----------------------------------------------------------------------------------
-+#if defined(PLATFORM_VITA)
-+void EnableCursor() {}       // Unlock cursor
-+void DisableCursor() {}      // Lock cursor
-+
-+bool IsKeyDown(int key) { return 0; }
-+
-+bool IsMouseButtonDown(int button) { return 0;}
-+float GetMouseWheelMove() { return 0.0f; }
-+Vector2 GetMousePosition() { return (Vector2){ 0.0f, 0.0f }; }
-+#else
- #if defined(CAMERA_STANDALONE)
- // NOTE: Camera controls depend on some raylib input functions
- static void EnableCursor() {}       // Unlock cursor
-@@ -239,6 +251,7 @@ static int IsMouseButtonDown(int button) { return 0;}
- static float GetMouseWheelMove() { return 0.0f; }
- static Vector2 GetMousePosition() { return (Vector2){ 0.0f, 0.0f }; }
- #endif
-+#endif
++	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/rayspine.h
++	@echo "raylib development files removed!"   
+ endif
  
- //----------------------------------------------------------------------------------
- // Module Functions Definition
+ # Clean everything
 diff --git a/src/config.h b/src/config.h
-index 6cec3446..4ba10a4c 100644
+index aea7df78..7d44077c 100644
 --- a/src/config.h
 +++ b/src/config.h
 @@ -31,30 +31,30 @@
- // Camera module is included (camera.h) and multiple predefined cameras are available: free, 1st/3rd person, orbital
+ // Camera module is included (rcamera.h) and multiple predefined cameras are available: free, 1st/3rd person, orbital
  #define SUPPORT_CAMERA_SYSTEM       1
- // Gestures module is included (gestures.h) to support gestures detection: tap, hold, swipe, drag
+ // Gestures module is included (rgestures.h) to support gestures detection: tap, hold, swipe, drag
 -#define SUPPORT_GESTURES_SYSTEM     1
 +#define SUPPORT_GESTURES_SYSTEM     0
  // Mouse gestures are directly mapped like touches and processed by gestures system
@@ -253,8 +175,7 @@ index 6cec3446..4ba10a4c 100644
 -#define SUPPORT_SSH_KEYBOARD_RPI    1
 +#define SUPPORT_SSH_KEYBOARD_RPI    0
  // Draw a mouse pointer on screen
--#define SUPPORT_MOUSE_CURSOR_NATIVE 1
-+#define SUPPORT_MOUSE_CURSOR_NATIVE 0
+ //#define SUPPORT_MOUSE_CURSOR_POINT   1
  // Setting a higher resolution can improve the accuracy of time-out intervals in wait functions.
  // However, it can also reduce overall system performance, because the thread scheduler switches tasks more often.
 -#define SUPPORT_WINMM_HIGHRES_TIMER 1
@@ -278,43 +199,76 @@ index 6cec3446..4ba10a4c 100644
  // Support saving binary data automatically to a generated storage.data file. This file is managed internally.
 -#define SUPPORT_DATA_STORAGE        1
 +#define SUPPORT_DATA_STORAGE        0
+ // Support automatic generated events, loading and recording of those events when required
+ //#define SUPPORT_EVENTS_AUTOMATION     1
+ // Support custom frame control, only for advance users
+@@ -89,7 +89,7 @@
+ //#define RLGL_ENABLE_OPENGL_DEBUG_CONTEXT       1
  
- // core: Configuration values
- //------------------------------------------------------------------------------------
-@@ -79,7 +79,7 @@
- // Module: rlgl - Configuration values
- //------------------------------------------------------------------------------------
  // Show OpenGL extensions and capabilities detailed logs on init
--//#define SUPPORT_GL_DETAILS_INFO        1
-+#define SUPPORT_GL_DETAILS_INFO        1
+-//#define RLGL_SHOW_GL_DETAILS_INFO              1
++#define RLGL_SHOW_GL_DETAILS_INFO              1
  
- #if defined(GRAPHICS_API_OPENGL_11) || defined(GRAPHICS_API_OPENGL_33)
-     #define DEFAULT_BATCH_BUFFER_ELEMENTS   8192    // Default internal render batch limits
-@@ -110,6 +110,8 @@
+ //#define RL_DEFAULT_BATCH_BUFFER_ELEMENTS    4096    // Default internal render batch elements limits
+ #define RL_DEFAULT_BATCH_BUFFERS               1      // Default number of batch buffers (multi-buffering)
+@@ -126,6 +126,7 @@
  //------------------------------------------------------------------------------------
  // Module: shapes - Configuration Flags
  //------------------------------------------------------------------------------------
 +#define SUPPORT_FONT_TEXTURE        1
-+
  // Use QUADS instead of TRIANGLES for drawing when possible
  // Some lines-based shapes could still use lines
  #define SUPPORT_QUADS_DRAW_MODE     1
-diff --git a/src/core.c b/src/core.c
-index 97224ddf..dd5fa24f 100644
---- a/src/core.c
-+++ b/src/core.c
-@@ -12,7 +12,8 @@
- *       - PLATFORM_DRM:     Linux native mode, including Raspberry Pi 4 with V3D fkms driver
- *       - PLATFORM_WEB:     HTML5 with asm.js (Chrome, Firefox)
- *       - PLATFORM_UWP:     Windows 10 App, Windows Phone, Xbox One
--*
-+*       - PLATFORM_VITA:    PlayStation Vita
+diff --git a/src/rayspine.h b/src/rayspine.h
+new file mode 100644
+index 00000000..c0709efe
+--- /dev/null
++++ b/src/rayspine.h
+@@ -0,0 +1,30 @@
++#include <spine/spine.h>
++#include <spine/extension.h>
++#ifndef SP_LAYER_SPACING
++#define SP_LAYER_SPACING 0
++#endif
 +
++#ifndef SP_LAYER_SPACING_BASE
++#define SP_LAYER_SPACING_BASE 0
++#endif
++typedef struct Vertex 
++{
++	// Position in x/y plane
++	float x, y;
++
++	// UV coordinates
++	float u, v;
++
++	// Color, each channel in the range from 0-1
++	// (Should really be a 32-bit RGBA packed color)
++	float r, g, b, a;
++} Vertex;
++#define MAX_TEXTURES 10
++#define MAX_VERTICES_PER_ATTACHMENT 2048
++
++
++void SpineDrawRegion(Vertex* vertices, Texture* texture, Vector3 position, int* vertex_order);
++void SpineDrawMesh(Vertex *vertices, int start, int count, Texture *texture, Vector3 position, int *vertex_order);
++void SpineDrawSkeleton(spSkeleton *skeleton, Vector3 position);
++Texture2D *SpineCreateTexture2d(char *path);
++void SpineTextureDestroy();
+diff --git a/src/rcore.c b/src/rcore.c
+index 3b451552..09b71ae7 100644
+--- a/src/rcore.c
++++ b/src/rcore.c
+@@ -11,6 +11,7 @@
+ *       - PLATFORM_RPI:     Raspberry Pi 0,1,2,3 (Raspbian, native mode)
+ *       - PLATFORM_DRM:     Linux native mode, including Raspberry Pi 4 with V3D fkms driver
+ *       - PLATFORM_WEB:     HTML5 with WebAssembly
++*       - PLATFORM_VITA:    PlayStation Vita
+ *
  *   CONFIGURATION:
  *
- *   #define PLATFORM_DESKTOP
-@@ -261,6 +262,16 @@
-     #include "uwp_events.h"             // UWP bootstrapping functions
+@@ -265,6 +266,15 @@
+     #include <emscripten/html5.h>       // Emscripten HTML5 library
  #endif
  
 +#if defined(PLATFORM_VITA)
@@ -326,32 +280,31 @@ index 97224ddf..dd5fa24f 100644
 +    #include "EGL/eglext.h"
 +    #include "GLES2/gl2.h"
 +#endif
-+
- #if defined(PLATFORM_WEB)
-     #define GLFW_INCLUDE_ES2            // GLFW3: Enable OpenGL ES 2.0 (translated to WebGL)
-     #include "GLFW/glfw3.h"             // GLFW3 library: Windows, OpenGL context and Input management
-@@ -359,7 +370,7 @@ typedef struct CoreData {
+ //----------------------------------------------------------------------------------
+ // Defines and Macros
+ //----------------------------------------------------------------------------------
+@@ -354,7 +364,7 @@ typedef struct CoreData {
  #if defined(PLATFORM_RPI)
          EGL_DISPMANX_WINDOW_T handle;       // Native window handle (graphic device)
  #endif
--#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP)
-+#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP) || defined(PLATFORM_VITA)
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_VITA)
  #if defined(PLATFORM_DRM)
-         int fd;                             // /dev/dri/... file descriptor
+         int fd;                             // File descriptor for /dev/dri/...
          drmModeConnector *connector;        // Direct Rendering Manager (DRM) mode connector
-@@ -472,7 +483,7 @@ typedef struct CoreData {
+@@ -472,7 +482,7 @@ typedef struct CoreData {
          double draw;                        // Time measure for frame draw
          double frame;                       // Time measure for one frame
          double target;                      // Desired time for one frame, if 0 not applied
--#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP)
-+#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP) || defined(PLATFORM_VITA)
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_VITA)
          unsigned long long base;            // Base time measure for hi-res timer
  #endif
-     } Time;
-@@ -647,6 +658,42 @@ static void RestoreTerminal(void)
+         unsigned int frameCounter;          // Frame counter
+@@ -692,6 +702,40 @@ struct android_app *GetAndroidApp(void)
+ }
  #endif
- // Initialize window and OpenGL context
- // NOTE: data parameter could be used to pass any kind of required data to the initialization
+ 
 +#if defined(PLATFORM_VITA)
 +void InitWindow(int width, int height, const char *title)
 +{
@@ -369,8 +322,8 @@ index 97224ddf..dd5fa24f 100644
 +    CORE.Window.screen.height = height;
 +    CORE.Window.currentFbo.width = width;
 +    CORE.Window.currentFbo.height = height;
-+    CORE.Input.Mouse.position.x = (float)CORE.Window.screen.width/2.0f;
-+    CORE.Input.Mouse.position.y = (float)CORE.Window.screen.height/2.0f;
++    CORE.Input.Mouse.currentPosition.x = (float)CORE.Window.screen.width/2.0f;
++    CORE.Input.Mouse.currentPosition.y = (float)CORE.Window.screen.height/2.0f;
 +    CORE.Input.Mouse.scale = (Vector2){ 1.0f, 1.0f };
 +    
 +
@@ -384,114 +337,76 @@ index 97224ddf..dd5fa24f 100644
 +    // NOTE: We setup a 1px padding on char rectangle to avoid pixel bleeding on MSAA filtering
 +    SetShapesTexture(GetFontDefault().texture, (Rectangle){ rec.x + 1, rec.y + 1, rec.width - 2, rec.height - 2 });
 +#endif
-+
 +}
-+
 +#else
+ // Initialize window and OpenGL context
+ // NOTE: data parameter could be used to pass any kind of required data to the initialization
  void InitWindow(int width, int height, const char *title)
- {
- #if defined(PLATFORM_UWP)
-@@ -795,7 +842,7 @@ void InitWindow(int width, int height, const char *title)
-     CORE.Input.Mouse.position.y = (float)CORE.Window.screen.height/2.0f;
- #endif        // PLATFORM_ANDROID
+@@ -854,7 +898,7 @@ void InitWindow(int width, int height, const char *title)
+ 
+ #endif        // PLATFORM_DESKTOP || PLATFORM_WEB || PLATFORM_RPI || PLATFORM_DRM
  }
 -
 +#endif
  // Close window and unload OpenGL context
  void CloseWindow(void)
  {
-@@ -952,7 +999,7 @@ bool WindowShouldClose(void)
+@@ -882,7 +926,7 @@ void CloseWindow(void)
+     timeEndPeriod(1);           // Restore time period
+ #endif
+ 
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_VITA)
+     // Close surface, context and display
+     if (CORE.Window.device != EGL_NO_DISPLAY)
+     {
+@@ -1032,7 +1076,7 @@ bool WindowShouldClose(void)
      else return true;
  #endif
  
--#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP)
-+#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP) || defined(PLATFORM_VITA)
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_VITA)
      if (CORE.Window.ready) return CORE.Window.shouldClose;
      else return true;
  #endif
-@@ -1778,7 +1825,7 @@ bool IsCursorHidden(void)
- {
-     return CORE.Input.Mouse.cursorHidden;
- }
--
-+#if !defined(PLATFORM_VITA)
- // Enables cursor (unlock cursor)
- void EnableCursor(void)
- {
-@@ -1808,7 +1855,7 @@ void DisableCursor(void)
- #endif
-     CORE.Input.Mouse.cursorHidden = true;
- }
--
-+#endif
- // Check if cursor is on the current screen.
- bool IsCursorOnScreen(void)
- {
-@@ -1898,8 +1945,9 @@ void EndDrawing(void)
+@@ -2643,6 +2687,9 @@ double GetTime(void)
  
-         CORE.Time.frame += waitTime;      // Total frame time: update + draw + wait
-     }
--
-+#if !defined(PLATFORM_VITA)
-     PollInputEvents();              // Poll user events
-+#endif
- }
- 
- // Initialize 2D mode with custom camera (2D)
-@@ -2531,6 +2579,10 @@ double GetTime(void)
      return (double)(time - CORE.Time.base)*1e-9;  // Elapsed time since InitTimer()
  #endif
- 
 +#if defined(PLATFORM_VITA)
 +    return (double)(sceKernelGetProcessTimeWide() - CORE.Time.base)*1e-6;
 +#endif
-+
- #if defined(PLATFORM_UWP)
-     return UWPGetQueryTimeFunc()();
- #endif
-@@ -2787,8 +2839,11 @@ const char *GetWorkingDirectory(void)
-     static char currentDir[MAX_FILEPATH_LENGTH];
-     memset(currentDir, 0, MAX_FILEPATH_LENGTH);
- 
-+#if !defined(PLATFORM_VITA)
-     char *ptr = GETCWD(currentDir, MAX_FILEPATH_LENGTH - 1);
--
-+#else
-+    char *ptr = ".";
-+#endif
-     return ptr;
  }
  
-@@ -2846,7 +2901,11 @@ void ClearDirectoryFiles(void)
+ // Setup window configuration flags (view FLAGS)
+@@ -2888,9 +2935,11 @@ const char *GetWorkingDirectory(void)
+ {
+     static char currentDir[MAX_FILEPATH_LENGTH] = { 0 };
+     memset(currentDir, 0, MAX_FILEPATH_LENGTH);
+-
++#if !defined(PLATFORM_VITA)
+     char *path = GETCWD(currentDir, MAX_FILEPATH_LENGTH - 1);
+-
++#else
++    char *path = ".";
++#endif
+     return path;
+ }
+ 
+@@ -2948,8 +2997,11 @@ void ClearDirectoryFiles(void)
  // Change working directory, returns true on success
  bool ChangeDirectory(const char *dir)
  {
 +#if !defined(PLATFORM_VITA)
      bool result = CHDIR(dir);
+-
 +#else
 +    bool result = 0;
 +#endif
- 
      if (result != 0) TRACELOG(LOG_WARNING, "SYSTEM: Failed to change to directory: %s", dir);
  
-@@ -3094,6 +3153,7 @@ void OpenURL(const char *url)
- // Module Functions Definition - Input (Keyboard, Mouse, Gamepad) Functions
- //----------------------------------------------------------------------------------
- // Detect if a key has been pressed once
-+#if !defined(PLATFORM_VITA)
- bool IsKeyPressed(int key)
- {
-     bool pressed = false;
-@@ -3498,7 +3558,7 @@ Vector2 GetTouchPosition(int index)
- 
-     return position;
- }
--
-+#endif
- //----------------------------------------------------------------------------------
- // Module specific Functions Definition
- //----------------------------------------------------------------------------------
-@@ -3507,6 +3567,171 @@ Vector2 GetTouchPosition(int index)
+     return (result == 0);
+@@ -3698,6 +3750,171 @@ int GetTouchPointCount(void)
  // NOTE: width and height represent the screen (framebuffer) desired size, not actual display size
  // If width or height are 0, default display size will be used for framebuffer size
  // NOTE: returns false in case graphic device could not be created
@@ -663,7 +578,7 @@ index 97224ddf..dd5fa24f 100644
  static bool InitGraphicsDevice(int width, int height)
  {
      CORE.Window.screen.width = width;            // User desired width
-@@ -4398,7 +4623,7 @@ static bool InitGraphicsDevice(int width, int height)
+@@ -4450,7 +4667,7 @@ static bool InitGraphicsDevice(int width, int height)
  
      return true;
  }
@@ -672,86 +587,36 @@ index 97224ddf..dd5fa24f 100644
  // Set viewport for a provided width and height
  static void SetupViewport(int width, int height)
  {
-@@ -4527,6 +4752,10 @@ static void InitTimer(void)
+@@ -4577,7 +4794,9 @@ static void InitTimer(void)
      }
      else TRACELOG(LOG_WARNING, "TIMER: Hi-resolution timer not available");
  #endif
+-
 +#if defined(PLATFORM_VITA)
 +    CORE.Time.base=sceKernelGetProcessTimeWide();
 +#endif
-+
- 
      CORE.Time.previous = GetTime();     // Get time as double
  }
-@@ -4865,7 +5094,7 @@ static void SwapBuffers(void)
+ 
+@@ -4635,7 +4854,7 @@ void SwapScreenBuffer(void)
      glfwSwapBuffers(CORE.Window.handle);
  #endif
  
--#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP)
-+#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_UWP) ||  defined(PLATFORM_VITA)
+-#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM)
++#if defined(PLATFORM_ANDROID) || defined(PLATFORM_RPI) || defined(PLATFORM_DRM) || defined(PLATFORM_VITA)
      eglSwapBuffers(CORE.Window.device, CORE.Window.surface);
  
  #if defined(PLATFORM_DRM)
-diff --git a/src/models.c b/src/models.c
-index feaadf83..d86aec8e 100644
---- a/src/models.c
-+++ b/src/models.c
-@@ -852,7 +852,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
-     mesh->vboId[1] = rlLoadVertexBuffer(mesh->texcoords, mesh->vertexCount*2*sizeof(float), dynamic);
-     rlSetVertexAttribute(1, 2, RL_FLOAT, 0, 0, 0);
-     rlEnableVertexAttribute(1);
--
-+#if !defined(PLATFORM_VITA)
-     if (mesh->normals != NULL)
-     {
-         // Enable vertex attributes: normals (shader-location = 2)
-@@ -867,7 +867,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
-         rlSetVertexAttributeDefault(2, value, SHADER_ATTRIB_VEC3, 3);
-         rlDisableVertexAttribute(2);
-     }
--
-+#endif
-     if (mesh->colors != NULL)
-     {
-         // Enable vertex attribute: color (shader-location = 3)
-@@ -3171,11 +3171,12 @@ static Model LoadOBJ(const char *fileName)
-         char currentDir[1024] = { 0 };
-         strcpy(currentDir, GetWorkingDirectory());
-         const char *workingDir = GetDirectoryPath(fileName);
-+        #if !defined(PLATFORM_VITA) 
-         if (CHDIR(workingDir) != 0)
-         {
-             TRACELOG(LOG_WARNING, "MODEL: [%s] Failed to change working directory", workingDir);
-         }
--
-+        #endif
-         unsigned int flags = TINYOBJ_FLAG_TRIANGULATE;
-         int ret = tinyobj_parse_obj(&attrib, &meshes, &meshCount, &materials, &materialCount, fileData, dataSize, flags);
- 
-@@ -3311,11 +3312,12 @@ static Model LoadOBJ(const char *fileName)
-         RL_FREE(vtCount);
-         RL_FREE(vnCount);
-         RL_FREE(faceCount);
--
-+        #if !defined(PLATFORM_VITA) 
-         if (CHDIR(currentDir) != 0)
-         {
-             TRACELOG(LOG_WARNING, "MODEL: [%s] Failed to change working directory", currentDir);
-         }
-+        #endif
-     }
- 
-     return model;
 diff --git a/src/rlgl.h b/src/rlgl.h
-index c60a2a70..e42c3662 100644
+index 4f9d8fa0..149ab6b2 100644
 --- a/src/rlgl.h
 +++ b/src/rlgl.h
-@@ -3701,6 +3701,33 @@ static void rlLoadShaderDefault(void)
+@@ -4265,6 +4265,33 @@ static void rlLoadShaderDefault(void)
+     for (int i = 0; i < RL_MAX_SHADER_LOCATIONS; i++) RLGL.State.defaultShaderLocs[i] = -1;
  
-     // NOTE: All locations must be reseted to -1 (no location)
-     for (int i = 0; i < MAX_SHADER_LOCATIONS; i++) RLGL.State.defaultShader.locs[i] = -1;
+     // Vertex shader directly defined, no external file required
 +#if defined (PLATFORM_VITA)
-+const char *vShaderDefault =
++const char *defaultVShaderCode =
 +    "void main(                         \n"
 +    "float3 vertexPosition,             \n"
 +    "float2 vertexTexCoord,             \n"
@@ -765,7 +630,7 @@ index c60a2a70..e42c3662 100644
 +    "    fragColor = vertexColor;       \n"
 +    "    gl_Position = mul(float4(vertexPosition,1.f),mvp); \n"
 +    "}                                  \n";
-+    const char *fShaderDefault =
++    const char *defaultFShaderCode =
 +    "void main(                       \n"
 +    "float2 fragTexCoord : TEXCOORD0,   \n"
 +    "float4 fragColor : COLOR0,                  \n"
@@ -777,25 +642,337 @@ index c60a2a70..e42c3662 100644
 +    "    finalColor=texelColor*colDiffuse*fragColor;      \n"
 +    "}                                  \n";
 +#else
- 
-     // Vertex shader directly defined, no external file required
-     const char *vShaderDefault =
-@@ -3774,6 +3801,7 @@ static void rlLoadShaderDefault(void)
+     const char *defaultVShaderCode =
+ #if defined(GRAPHICS_API_OPENGL_21)
+     "#version 120                       \n"
+@@ -4336,7 +4363,7 @@ static void rlLoadShaderDefault(void)
      "    gl_FragColor = texelColor*colDiffuse*fragColor;      \n"
      "}                                  \n";
  #endif
-+#endif //VITA
- 
+-
++#endif
      // NOTE: Compiled vertex/fragment shaders are kept for re-use
-     RLGL.State.defaultVShaderId = rlCompileShader(vShaderDefault, GL_VERTEX_SHADER);     // Compile default vertex shader
+     RLGL.State.defaultVShaderId = rlCompileShader(defaultVShaderCode, GL_VERTEX_SHADER);     // Compile default vertex shader
+     RLGL.State.defaultFShaderId = rlCompileShader(defaultFShaderCode, GL_FRAGMENT_SHADER);   // Compile default fragment shader
+diff --git a/src/rmodels.c b/src/rmodels.c
+index 8218a818..46b37bd6 100644
+--- a/src/rmodels.c
++++ b/src/rmodels.c
+@@ -1095,7 +1095,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
+     mesh->vboId[1] = rlLoadVertexBuffer(mesh->texcoords, mesh->vertexCount*2*sizeof(float), dynamic);
+     rlSetVertexAttribute(1, 2, RL_FLOAT, 0, 0, 0);
+     rlEnableVertexAttribute(1);
+-
++#if !defined(PLATFORM_VITA)
+     if (mesh->normals != NULL)
+     {
+         // Enable vertex attributes: normals (shader-location = 2)
+@@ -1111,7 +1111,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
+         rlSetVertexAttributeDefault(2, value, SHADER_ATTRIB_VEC3, 3);
+         rlDisableVertexAttribute(2);
+     }
+-
++#endif
+     if (mesh->colors != NULL)
+     {
+         // Enable vertex attribute: color (shader-location = 3)
+@@ -3741,11 +3741,12 @@ static Model LoadOBJ(const char *fileName)
+         char currentDir[1024] = { 0 };
+         strcpy(currentDir, GetWorkingDirectory());
+         const char *workingDir = GetDirectoryPath(fileName);
++#if !defined(PLATFORM_VITA)
+         if (CHDIR(workingDir) != 0)
+         {
+             TRACELOG(LOG_WARNING, "MODEL: [%s] Failed to change working directory", workingDir);
+         }
+-
++#endif
+         unsigned int flags = TINYOBJ_FLAG_TRIANGULATE;
+         int ret = tinyobj_parse_obj(&attrib, &meshes, &meshCount, &materials, &materialCount, fileText, dataSize, flags);
+ 
+@@ -3888,11 +3889,12 @@ static Model LoadOBJ(const char *fileName)
+         RL_FREE(vtCount);
+         RL_FREE(vnCount);
+         RL_FREE(faceCount);
+-
++#if !defined(PLATFORM_VITA)
+         if (CHDIR(currentDir) != 0)
+         {
+             TRACELOG(LOG_WARNING, "MODEL: [%s] Failed to change working directory", currentDir);
+         }
++#endif
+     }
+ 
+     return model;
+diff --git a/src/rspine.c b/src/rspine.c
+new file mode 100644
+index 00000000..97f78020
+--- /dev/null
++++ b/src/rspine.c
+@@ -0,0 +1,255 @@
++#include "raylib.h"         // Declares module functions
++
++// Check if config flags have been externally provided on compilation line
++#if !defined(EXTERNAL_CONFIG_FLAGS)
++    #include "config.h"     // Defines module configuration flags
++#endif
++
++#include "utils.h"          // Required for: TRACELOG(), LoadFileData(), LoadFileText(), SaveFileText()
++#include "rlgl.h"           // OpenGL abstraction layer to OpenGL 1.1, 2.1, 3.3+ or ES2
++#include "raymath.h"        // Required for: Vector3, Quaternion and Matrix functionality
++
++#include <stdio.h>          // Required for: sprintf()
++#include <stdlib.h>         // Required for: malloc(), free()
++#include <string.h>         // Required for: memcmp(), strlen()
++#include <math.h>           // Required for: sinf(), cosf(), sqrtf(), fabsf()
++
++#include "rayspine.h"
++
++Texture2D gtexture;
++Texture2D tm_textures[MAX_TEXTURES] = {0};
++int texture_index = 0;
++float anti_z_fighting_index = SP_LAYER_SPACING_BASE;
++float worldVerticesPositions[MAX_VERTICES_PER_ATTACHMENT];
++Vertex vertices[MAX_VERTICES_PER_ATTACHMENT];
++int VERTEX_ORDER_NORMAL[] = {0, 1, 2, 4};
++int VERTEX_ORDER_INVERSE[] = {4, 2, 1, 0};
++
++
++void SpineAddVertex(float x, float y, float u, float v, float r, float g, float b, float a, int* index) 
++{
++	Vertex* vertex = &vertices[*index];
++	vertex->x = x;
++	vertex->y = y;
++	vertex->u = u;
++	vertex->v = v;
++	vertex->r = r;
++	vertex->g = g;
++	vertex->b = b;
++	vertex->a = a;
++ // TraceLog(LOG_INFO,"%s val=%d x=%f y=%f u=%f v=%f r=%f g=%f b=%f a=%f index=%d",__FUNCTION__,val,x,y,u,v,r,g,b,a,*index);
++
++	*index += 1;
++}
++Texture2D *SpineCreateTexture2d(char *path) 
++{
++	tm_textures[texture_index] = LoadTexture(path);
++	gtexture=tm_textures[texture_index];
++	Texture2D *t = &tm_textures[texture_index];
++	SetTextureFilter(*t,TEXTURE_FILTER_BILINEAR);
++	texture_index++;
++	return t;
++}
++
++void SpineTextureDestroy()
++{
++	while(texture_index--) UnloadTexture(tm_textures[texture_index]);
++}
++
++void SpineDrawRegion(Vertex* vertices, Texture* texture, Vector3 position, int* vertex_order)
++{
++	Vertex vertex;
++//	TRACELOG(LOG_INFO, "%s %d",__FUNCTION__,texture->id);
++
++	rlSetTexture(texture->id);
++	rlPushMatrix();
++	{
++		rlBegin(RL_QUADS);
++		{
++			rlColor4f(1.0, 1.0, 1.0, 1.0);
++			rlNormal3f(0.0f, 0.0f, 1.0f);
++			for (int i = 0; i < 4; i++)
++			{
++				vertex = vertices[vertex_order[i]];
++				rlTexCoord2f(vertex.u, vertex.v);
++				rlVertex3f( position.x + vertex.x, position.y + vertex.y, position.z + anti_z_fighting_index);
++			}
++		}
++		rlEnd();
++
++#ifdef SP_DRAW_DOUBLE_FACED
++		rlBegin(RL_QUADS);
++		{
++			rlNormal3f(0.0f, 0.0f, 1.0f);
++			for (int i = 3; i >= 0; i--)
++			{
++				vertex = vertices[vertex_order[i]];
++				rlTexCoord2f(vertex.u, vertex.v);
++				rlColor4f(vertex.r, vertex.g, vertex.b, vertex.a);
++				rlVertex3f( position.x + vertex.x, position.y + vertex.y, position.z - anti_z_fighting_index);
++			}
++		}
++		rlEnd();
++#endif
++
++	}
++	rlPopMatrix();
++	rlSetTexture(0);
++}
++void SpineDrawMesh(Vertex *vertices, int start, int count, Texture *texture, Vector3 position, int *vertex_order)
++{
++	Vertex vertex;
++	//TRACELOG(LOG_INFO, "%s %d",__FUNCTION__,texture->id);
++
++	rlPushMatrix();
++	{
++		for(int vertexIndex = start; vertexIndex < count; vertexIndex += 3)
++		{
++			rlEnableTexture(texture->id);
++			rlBegin(RL_QUADS);
++			{
++				int i;
++				for (i = 2; i > -1; i--)
++				{
++					vertex = vertices[vertexIndex + i];
++					rlTexCoord2f(vertex.u, vertex.v);
++					rlColor4f(vertex.r, vertex.g, vertex.b, vertex.a);
++					rlVertex3f(position.x + vertex.x, position.y + vertex.y, position.z + anti_z_fighting_index);
++				}
++				rlVertex3f(position.x + vertex.x, position.y + vertex.y, position.z + anti_z_fighting_index);
++            }
++			rlEnd();
++#ifdef SP_DRAW_DOUBLE_FACED
++			TraceLog(LOG_INFO,"double sided not supported for mesh based spine files\n");
++            return;
++#endif
++
++#ifdef SP_RENDER_WIREFRAME
++			DrawTriangleLines((Vector2) {vertices[vertexIndex].x + position.x, vertices[vertexIndex].y + position.y},
++                                  (Vector2) {vertices[vertexIndex + 1].x + position.x, vertices[vertexIndex + 1].y + position.y},
++                                  (Vector2) {vertices[vertexIndex + 2].x + position.x, vertices[vertexIndex + 2].y + position.y}, vertexIndex == 0 ? RED : GREEN);
++#endif
++		}
++	}
++	rlPopMatrix();
++	rlDisableTexture();
++}
++void SpineDrawSkeleton(spSkeleton *skeleton, Vector3 position)
++{
++
++	int *vertex_order = (skeleton->scaleX * skeleton->scaleY < 0) ? VERTEX_ORDER_NORMAL : VERTEX_ORDER_INVERSE;
++	anti_z_fighting_index = SP_LAYER_SPACING_BASE;
++
++	// For each slot in the draw order array of the skeleton
++	for (int i = 0; i <skeleton->slotsCount; ++i)
++	{    
++		//TraceLog(LOG_INFO,"%s %d",__FUNCTION__,i);
++		anti_z_fighting_index -= SP_LAYER_SPACING;
++		spSlot *slot = skeleton->drawOrder[i];
++
++		// Fetch the currently active attachment, continue
++		// with the next slot in the draw order if no
++		// attachment is active on the slot
++		spAttachment *attachment = slot->attachment;
++		if(!attachment) continue;
++
++		// Calculate the tinting color based on the skeleton's color
++		// and the slot's color. Each color channel is given in the
++		// range [0-1], you may have to multiply by 255 and cast to
++		// and int if your engine uses integer ranges for color channels.
++		float tintR = skeleton->color.r * slot->color.r;
++		float tintG = skeleton->color.g * slot->color.g;
++		float tintB = skeleton->color.b * slot->color.b;
++		float tintA = skeleton->color.a * slot->color.a;
++
++		// Fill the vertices array depending on the type of attachment
++		Texture *texture = 0;
++		int vertexIndex = 0;
++		if (attachment->type == SP_ATTACHMENT_REGION)
++		{
++			//TraceLog(LOG_INFO,"%s %d",__FUNCTION__,i);
++
++			// Cast to an spRegionAttachment so we can get the rendererObject
++			// and compute the world vertices
++			spRegionAttachment *regionAttachment = (spRegionAttachment *) attachment;
++
++			// Our engine specific Texture is stored in the spAtlasRegion which was
++			// assigned to the attachment on load. It represents the texture atlas
++			// page that contains the image the region attachment is mapped to
++			texture = (Texture *) ((spAtlasRegion *) regionAttachment->rendererObject)->page->rendererObject;
++			//TraceLog(LOG_INFO,"%s texture id=%d",__FUNCTION__,texture->id);
++
++			// Computed the world vertices positions for the 4 vertices that make up
++			// the rectangular region attachment. This assumes the world transform of the
++			// bone to which the slot (and hence attachment) is attached has been calculated
++			// before rendering via spSkeleton_updateWorldTransform
++			spRegionAttachment_computeWorldVertices(regionAttachment, slot->bone, worldVerticesPositions, 0, 2);
++
++			// Create 2 triangles, with 3 vertices each from the region's
++			// world vertex positions and its UV coordinates (in the range [0-1]).
++			SpineAddVertex(worldVerticesPositions[0], worldVerticesPositions[1],
++						regionAttachment->uvs[0], regionAttachment->uvs[1],
++						tintR, tintG, tintB, tintA, &vertexIndex);
++
++			SpineAddVertex(worldVerticesPositions[2], worldVerticesPositions[3],
++						regionAttachment->uvs[2], regionAttachment->uvs[3],
++						tintR, tintG, tintB, tintA, &vertexIndex);
++
++			SpineAddVertex(worldVerticesPositions[4], worldVerticesPositions[5],
++						regionAttachment->uvs[4], regionAttachment->uvs[5],
++						tintR, tintG, tintB, tintA, &vertexIndex);
++
++			SpineAddVertex(worldVerticesPositions[4], worldVerticesPositions[5],
++						regionAttachment->uvs[4], regionAttachment->uvs[5],
++						tintR, tintG, tintB, tintA, &vertexIndex);
++
++			SpineAddVertex(worldVerticesPositions[6], worldVerticesPositions[7],
++						regionAttachment->uvs[6], regionAttachment->uvs[7],
++						tintR, tintG, tintB, tintA, &vertexIndex);
++
++			SpineAddVertex(worldVerticesPositions[0], worldVerticesPositions[1],
++						regionAttachment->uvs[0], regionAttachment->uvs[1],
++						tintR, tintG, tintB, tintA, &vertexIndex);
++			//addVertexjander();
++
++			SpineDrawRegion(vertices, texture, position, vertex_order);
++		} 
++		else if(attachment->type == SP_ATTACHMENT_MESH)
++		{
++			// Cast to an spMeshAttachment so we can get the rendererObject
++			// and compute the world vertices
++			spMeshAttachment *mesh = (spMeshAttachment *) attachment;
++
++			// Check the number of vertices in the mesh attachment. If it is bigger
++			// than our scratch buffer, we don't render the mesh. We do this here
++			// for simplicity, in production you want to reallocate the scratch buffer
++			// to fit the mesh.
++			if (mesh->super.worldVerticesLength > MAX_VERTICES_PER_ATTACHMENT) continue;
++
++			// Our engine specific Texture is stored in the spAtlasRegion which was
++			// assigned to the attachment on load. It represents the texture atlas
++			// page that contains the image the mesh attachment is mapped to
++			texture = (Texture *) ((spAtlasRegion *) mesh->rendererObject)->page->rendererObject;
++
++			// Computed the world vertices positions for the vertices that make up
++			// the mesh attachment. This assumes the world transform of the
++			// bone to which the slot (and hence attachment) is attached has been calculated
++			// before rendering via spSkeleton_updateWorldTransform
++			spVertexAttachment_computeWorldVertices(SUPER(mesh), slot, 0, mesh->super.worldVerticesLength,worldVerticesPositions, 0, 2);
++
++			// Mesh attachments use an array of vertices, and an array of indices to define which
++			// 3 vertices make up each triangle. We loop through all triangle indices
++			// and simply emit a vertex for each triangle's vertex.
++			for(int i = 0; i < mesh->trianglesCount; ++i)
++			{
++				int index = mesh->triangles[i] << 1;
++				SpineAddVertex(worldVerticesPositions[index], worldVerticesPositions[index + 1],
++							mesh->uvs[index], mesh->uvs[index + 1],
++							tintR, tintG, tintB, tintA, &vertexIndex);
++			}
++
++			// Draw the mesh we created for the attachment
++			SpineDrawMesh(vertices, 0, vertexIndex, texture, position, vertex_order);
++		}
++	}
++}
 diff --git a/src/utils.c b/src/utils.c
-index 66804fb2..fd90ef07 100644
+index 215454cc..729766e7 100644
 --- a/src/utils.c
 +++ b/src/utils.c
-@@ -106,7 +106,167 @@ static int android_close(void *cookie);
- // Set the current threshold (minimum) log level
+@@ -104,6 +104,166 @@ static int android_close(void *cookie);
  void SetTraceLogLevel(int logType) { logTypeLevel = logType; }
  
+ // Show trace log messages (LOG_INFO, LOG_WARNING, LOG_ERROR, LOG_DEBUG)
 +#if defined(PLATFORM_VITA)
 +#include <psp2/net/net.h>
 +#include <psp2/net/netctl.h>
@@ -929,7 +1106,7 @@ index 66804fb2..fd90ef07 100644
 +
 +    return debugnet_initialized;
 +}
- // Show trace log messages (LOG_INFO, LOG_WARNING, LOG_ERROR, LOG_DEBUG)
++ // Show trace log messages (LOG_INFO, LOG_WARNING, LOG_ERROR, LOG_DEBUG)
 +void TraceLog(int logType, const char *text, ...)
 +{
 +    // Message has level below current threshold, don't emit
@@ -956,11 +1133,10 @@ index 66804fb2..fd90ef07 100644
 +    }
 +}
 +#else
-+
  void TraceLog(int logType, const char *text, ...)
  {
  #if defined(SUPPORT_TRACELOG)
-@@ -159,7 +319,7 @@ void TraceLog(int logType, const char *text, ...)
+@@ -156,7 +316,7 @@ void TraceLog(int logType, const char *text, ...)
  
  #endif  // SUPPORT_TRACELOG
  }
@@ -970,12 +1146,12 @@ index 66804fb2..fd90ef07 100644
  // NOTE: Initializes to zero by default
  void *MemAlloc(int size)
 diff --git a/src/utils.h b/src/utils.h
-index 3d7a3798..da638c97 100644
+index c9b33181..8a94af4e 100644
 --- a/src/utils.h
 +++ b/src/utils.h
-@@ -51,7 +51,12 @@
- #if defined(PLATFORM_ANDROID)
-     #define fopen(name, mode) android_fopen(name, mode)
+@@ -31,7 +31,12 @@
+     #include <stdio.h>                      // Required for: FILE
+     #include <android/asset_manager.h>      // Required for: AAssetManager
  #endif
 -
 +#if defined(PLATFORM_VITA)
@@ -984,6 +1160,6 @@ index 3d7a3798..da638c97 100644
 +void debugNetUDPPrintf(const char *format, ...);
 +#define debugNetPrintf TRACELOG
 +#endif
- //----------------------------------------------------------------------------------
- // Types and Structures Definition
- //----------------------------------------------------------------------------------
+ #if defined(SUPPORT_TRACELOG)
+     #define TRACELOG(level, ...) TraceLog(level, __VA_ARGS__)
+ 
