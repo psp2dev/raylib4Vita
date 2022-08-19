@@ -1,21 +1,26 @@
 diff --git a/src/Makefile b/src/Makefile
-index 6fbb8a3f..d3306919 100644
+index c03278fb..e7d2ed8a 100644
 --- a/src/Makefile
 +++ b/src/Makefile
 @@ -11,6 +11,7 @@
- #    PLATFORM_RPI:      Raspberry Pi (Raspbian)
- #    PLATFORM_DRM:      Linux native mode, including Raspberry Pi 4 with V3D fkms driver
+ #    PLATFORM_RPI:      Raspberry Pi (deprecated - RPI OS Buster only)
+ #    PLATFORM_DRM:      Linux native mode, including Raspberry Pi (RPI OS Bullseye)
  #    PLATFORM_WEB:      HTML5 (Chrome, Firefox)
 +#    PLATFORM_VITA:     PlayStation Vita
  #
  #  Many thanks to Milan Nikolic (@gen2brain) for implementing Android platform pipeline.
  #  Many thanks to Emanuele Petriglia for his contribution on GNU/Linux pipeline.
-@@ -67,20 +68,21 @@ RAYLIB_RES_FILE      ?= ./raylib.dll.rc.data
- 
- # Define raylib platform
- # Options:  PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
+@@ -42,8 +43,7 @@
+ # Define required environment variables
+ #------------------------------------------------------------------------------------------------
+ # Define target platform: PLATFORM_DESKTOP, PLATFORM_RPI, PLATFORM_DRM, PLATFORM_ANDROID, PLATFORM_WEB
 -PLATFORM             ?= PLATFORM_DESKTOP
+-
 +PLATFORM             ?= PLATFORM_VITA
+ # Define required raylib variables
+ RAYLIB_VERSION        = 4.2.0
+ RAYLIB_API_VERSION    = 420
+@@ -76,10 +76,11 @@ RAYLIB_CONFIG_FLAGS  ?= NONE
  
  # Include raylib modules on compilation
  # NOTE: Some programs like tools could not require those modules
@@ -26,27 +31,42 @@ index 6fbb8a3f..d3306919 100644
  RAYLIB_MODULE_PHYSAC ?= FALSE
 +RAYLIB_MODULE_SPINE  ?= FALSE
  
- RAYLIB_MODULE_RAYGUI_PATH ?= $(RAYLIB_SRC_PATH)/extras
- RAYLIB_MODULE_PHYSAC_PATH ?= $(RAYLIB_SRC_PATH)/extras
+ # NOTE: Additional libraries have been moved to their own repos:
+ # raygui: https://github.com/raysan5/raygui
+@@ -88,7 +89,7 @@ RAYLIB_MODULE_RAYGUI_PATH ?= $(RAYLIB_SRC_PATH)/../../raygui/src
+ RAYLIB_MODULE_PHYSAC_PATH ?= $(RAYLIB_SRC_PATH)/../../physac/src
  
  # Use external GLFW library instead of rglfw module
--USE_EXTERNAL_GLFW    ?= FALSE
-+USE_EXTERNAL_GLFW    ?= TRUE
+-USE_EXTERNAL_GLFW     ?= FALSE
++USE_EXTERNAL_GLFW     ?= TRUE
  
- # Use Wayland display server protocol on Linux desktop
- # by default it uses X11 windowing system
-@@ -143,7 +145,9 @@ ifeq ($(PLATFORM),PLATFORM_DRM)
-         PLATFORM_OS = LINUX
+ # Use Wayland display server protocol on Linux desktop (by default it uses X11 windowing system)
+ # NOTE: This variable is only used for PLATFORM_OS: LINUX
+@@ -103,9 +104,10 @@ ifeq ($(PLATFORM),PLATFORM_RPI)
+     endif
+ endif
+ 
++
+ # Determine if the file has root access (only required to install raylib)
+ # "whoami" prints the name of the user that calls him (so, if it is the root user, "whoami" prints "root")
+-ROOT = $(shell whoami)
++ROOT = $(whoami)
+ 
+ # By default we suppose we are working on Windows
+ HOST_PLATFORM_OS ?= WINDOWS
+@@ -179,7 +181,10 @@ ifeq ($(PLATFORM),PLATFORM_WEB)
+         endif
      endif
  endif
 -
 +ifeq ($(PLATFORM),PLATFORM_VITA)
-+    PLATFORM_OS = VITA
++   PLATFORM_OS = VITA
++   PLATFORM_SHELL = sh
 +endif
- # RAYLIB_SRC_PATH adjustment for different platforms.
- # If using GNU make, we can get the full path to the top of the tree. Windows? BSD?
- # Required for ldconfig or other tools that do not perform path expansion.
-@@ -222,7 +226,9 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
+ ifeq ($(PLATFORM),PLATFORM_WEB)
+     # Emscripten required variables
+     EMSDK_PATH         ?= C:/emsdk
+@@ -248,7 +253,9 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
      # By default use OpenGL ES 2.0 on Android
      GRAPHICS = GRAPHICS_API_OPENGL_ES2
  endif
@@ -54,10 +74,10 @@ index 6fbb8a3f..d3306919 100644
 +ifeq ($(PLATFORM),PLATFORM_VITA)
 +    GRAPHICS = GRAPHICS_API_OPENGL_ES2
 +endif
- # Define default C compiler and archiver to pack library
+ # Define default C compiler and archiver to pack library: CC, AR
+ #------------------------------------------------------------------------------------------------
  CC = gcc
- AR = ar
-@@ -262,7 +268,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
+@@ -295,7 +302,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
      # It seems from Android NDK r22 onwards we need to use llvm-ar
      AR = $(ANDROID_TOOLCHAIN)/bin/llvm-ar
  endif
@@ -66,22 +86,22 @@ index 6fbb8a3f..d3306919 100644
 +    CC = arm-vita-eabi-gcc
 +    AR = arm-vita-eabi-ar
 +endif
- # Define compiler flags:
+ # Define compiler flags: CFLAGS
+ #------------------------------------------------------------------------------------------------
  #  -O1                      defines optimization level
- #  -g                       include debug information on compilation
-@@ -376,7 +385,10 @@ endif
- # Define include paths for required headers
+@@ -414,7 +424,10 @@ endif
  # NOTE: Several external required libraries (stb and others)
+ #------------------------------------------------------------------------------------------------
  INCLUDE_PATHS = -I. -Iexternal/glfw/include -Iexternal/glfw/deps/mingw
 -
 +ifeq ($(PLATFORM),PLATFORM_VITA)
-+    CFLAGS = -Wl,-q -Wall -Wno-incompatible-pointer-types -Wno-pointer-sign -O3 -nostartfiles -DVITA
++    CFLAGS = -Wl,-q -Wall -Wno-incompatible-pointer-types -Wno-pointer-sign -O3 -nostartfiles -DVITA -D$(PLATFORM) -D$(GRAPHICS)
 +    INCLUDE_PATHS = -I.
 +endif
+ # Define additional directories containing required header files
  ifeq ($(PLATFORM),PLATFORM_DESKTOP)
      ifeq ($(PLATFORM_OS),BSD)
-         INCLUDE_PATHS += -I/usr/local/include
-@@ -470,6 +482,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
+@@ -563,6 +576,10 @@ ifeq ($(PLATFORM),PLATFORM_ANDROID)
      OBJS += android_native_app_glue.o
  endif
  
@@ -89,10 +109,10 @@ index 6fbb8a3f..d3306919 100644
 +    OBJS += rspine.o
 +endif
 +
+ # Define processes to execute
+ #------------------------------------------------------------------------------------------------
  # Default target entry
- all: raylib
- 
-@@ -540,7 +556,7 @@ else
+@@ -635,7 +652,7 @@ else
      else
          # Compile raylib static library version $(RAYLIB_VERSION)
          # WARNING: You should type "make clean" before doing this target.
@@ -101,37 +121,58 @@ index 6fbb8a3f..d3306919 100644
  		@echo "raylib static library generated (lib$(RAYLIB_LIB_NAME).a) in $(RAYLIB_RELEASE_PATH)!"
      endif
  endif
-@@ -599,6 +615,9 @@ physac.c:
+@@ -703,6 +720,10 @@ endif
  android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
  	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
  
 +# Compile spine module
 +rspine.o : rspine.c raylib.h rlgl.h raymath.h utils.h
-+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -D$(PLATFORM) -D$(GRAPHICS)
++	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
++
  
  # Install generated and needed files to desired directories.
  # On GNU/Linux and BSDs, there are some standard directories that contain extra
-@@ -613,10 +632,12 @@ android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
- # TODO: Add other platforms. Remove sudo requirement, i.e. add USER mode.
+@@ -716,69 +737,32 @@ android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
+ # See below and ../examples/Makefile for more information.
  
  # RAYLIB_INSTALL_PATH should be the desired full path to libraylib. No relative paths.
 -DESTDIR ?= /usr/local
--RAYLIB_INSTALL_PATH ?= $(DESTDIR)/lib
-+#DESTDIR ?=  $(VITASDK)/arm-vita-eabi
-+PREFIX ?= $(VITASDK)/arm-vita-eabi
-+
-+RAYLIB_INSTALL_PATH ?= $(DESTDIR)$(PREFIX)/lib
++DESTDIR ?= $(VITASDK)/arm-vita-eabi
+ RAYLIB_INSTALL_PATH ?= $(DESTDIR)/lib
  # RAYLIB_H_INSTALL_PATH locates the installed raylib header and associated source files.
--RAYLIB_H_INSTALL_PATH ?= $(DESTDIR)/include
-+RAYLIB_H_INSTALL_PATH ?= $(DESTDIR)$(PREFIX)/include
+ RAYLIB_H_INSTALL_PATH ?= $(DESTDIR)/include
  
  install :
- ifeq ($(ROOT),root)
-@@ -648,7 +669,15 @@ ifeq ($(ROOT),root)
- 		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
-     endif
- else
+-ifeq ($(ROOT),root)
+-    ifeq ($(PLATFORM_OS),LINUX)
+-        # Attention! You are root, writing files to $(RAYLIB_INSTALL_PATH)
+-        # and $(RAYLIB_H_INSTALL_PATH). Consult this Makefile for more information.
+-        # Prepare the environment as needed.
+-		mkdir --parents --verbose $(RAYLIB_INSTALL_PATH)
+-		mkdir --parents --verbose $(RAYLIB_H_INSTALL_PATH)
+-        ifeq ($(RAYLIB_LIBTYPE),SHARED)
+-            # Installing raylib to $(RAYLIB_INSTALL_PATH).
+-			cp --update --verbose $(RAYLIB_RELEASE_PATH)/libraylib.so.$(RAYLIB_VERSION) $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_VERSION)
+-			cd $(RAYLIB_INSTALL_PATH); ln -fsv lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_VERSION) lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_API_VERSION)
+-			cd $(RAYLIB_INSTALL_PATH); ln -fsv lib$(RAYLIB_LIB_NAME).so.$(RAYLIB_API_VERSION) lib$(RAYLIB_LIB_NAME).so
+-            # Uncomment to update the runtime linker cache with RAYLIB_INSTALL_PATH.
+-            # Not necessary if later embedding RPATH in your executable. See examples/Makefile.
+-			ldconfig $(RAYLIB_INSTALL_PATH)
+-        else
+-            # Installing raylib to $(RAYLIB_INSTALL_PATH).
+-			cp --update --verbose $(RAYLIB_RELEASE_PATH)/lib$(RAYLIB_LIB_NAME).a $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).a
+-        endif
+-        # Copying raylib development files to $(RAYLIB_H_INSTALL_PATH).
+-		cp --update raylib.h $(RAYLIB_H_INSTALL_PATH)/raylib.h
+-		cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
+-		cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
+-		@echo "raylib development files installed/updated!"
+-    else
+-		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
+-    endif
+-else
 -	@echo "Error: Root permissions needed for installation. Try sudo make install"
+-endif
 +	mkdir -p $(RAYLIB_INSTALL_PATH)
 +	mkdir -p $(RAYLIB_H_INSTALL_PATH)
 +	cp --update --verbose $(RAYLIB_RELEASE_PATH)/lib$(RAYLIB_LIB_NAME).a $(RAYLIB_INSTALL_PATH)/lib$(RAYLIB_LIB_NAME).a
@@ -139,30 +180,50 @@ index 6fbb8a3f..d3306919 100644
 +	cp --update raymath.h $(RAYLIB_H_INSTALL_PATH)/raymath.h
 +	cp --update rlgl.h $(RAYLIB_H_INSTALL_PATH)/rlgl.h
 +	cp --update rayspine.h $(RAYLIB_H_INSTALL_PATH)/rayspine.h
-+	cp --update extras/physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
++#	cp --update $(RAYLIB_MODULE_PHYSAC_PATH)/physac.h $(RAYLIB_H_INSTALL_PATH)/physac.h
 +	@echo "raylib development files installed/updated!"
- endif
++
  
  # Remove raylib dev files installed on the system
-@@ -676,7 +705,12 @@ ifeq ($(ROOT),root)
- 		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
-     endif
- else
+ # NOTE: see 'install' target.
+ uninstall :
+-ifeq ($(ROOT),root)
+-    # WARNING: You are root, about to delete items from $(RAYLIB_INSTALL_PATH).
+-    # and $(RAYLIB_H_INSTALL_PATH). Please confirm each item.
+-    ifeq ($(PLATFORM_OS),LINUX)
+-        ifeq ($(RAYLIB_LIBTYPE),SHARED)
+-		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so
+-		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so.$(RAYLIB_API_VERSION)
+-		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.so.$(RAYLIB_VERSION)
+-        # Uncomment to clean up the runtime linker cache. See install target.
+-		ldconfig
+-        else
+-		rm --force --interactive --verbose $(RAYLIB_INSTALL_PATH)/libraylib.a
+-        endif
+-		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raylib.h
+-		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raymath.h
+-		rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/rlgl.h
+-		@echo "raylib development files removed!"
+-        else
+-		@echo "This function currently works on GNU/Linux systems. Add yours today (^;"
+-    endif
+-else
 -	@echo "Error: Root permissions needed for uninstallation. Try sudo make uninstall"
+-endif
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raylib.h
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/raymath.h
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/rlgl.h
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/physac.h
 +	rm --force --interactive --verbose $(RAYLIB_H_INSTALL_PATH)/rayspine.h
 +	@echo "raylib development files removed!"   
- endif
  
- # Clean everything
+ .PHONY: clean_shell_cmd clean_shell_sh
+ 
 diff --git a/src/config.h b/src/config.h
-index aea7df78..7d44077c 100644
+index ce7d9b04..979d4211 100644
 --- a/src/config.h
 +++ b/src/config.h
-@@ -31,30 +31,30 @@
+@@ -41,26 +41,26 @@
  // Camera module is included (rcamera.h) and multiple predefined cameras are available: free, 1st/3rd person, orbital
  #define SUPPORT_CAMERA_SYSTEM       1
  // Gestures module is included (rgestures.h) to support gestures detection: tap, hold, swipe, drag
@@ -174,8 +235,6 @@ index aea7df78..7d44077c 100644
  // Reconfigure standard input to receive key inputs, works with SSH connection.
 -#define SUPPORT_SSH_KEYBOARD_RPI    1
 +#define SUPPORT_SSH_KEYBOARD_RPI    0
- // Draw a mouse pointer on screen
- //#define SUPPORT_MOUSE_CURSOR_POINT   1
  // Setting a higher resolution can improve the accuracy of time-out intervals in wait functions.
  // However, it can also reduce overall system performance, because the thread scheduler switches tasks more often.
 -#define SUPPORT_WINMM_HIGHRES_TIMER 1
@@ -196,13 +255,10 @@ index aea7df78..7d44077c 100644
  // Support CompressData() and DecompressData() functions
 -#define SUPPORT_COMPRESSION_API     1
 +#define SUPPORT_COMPRESSION_API     0
- // Support saving binary data automatically to a generated storage.data file. This file is managed internally.
--#define SUPPORT_DATA_STORAGE        1
-+#define SUPPORT_DATA_STORAGE        0
  // Support automatic generated events, loading and recording of those events when required
  //#define SUPPORT_EVENTS_AUTOMATION     1
  // Support custom frame control, only for advance users
-@@ -89,7 +89,7 @@
+@@ -93,7 +93,7 @@
  //#define RLGL_ENABLE_OPENGL_DEBUG_CONTEXT       1
  
  // Show OpenGL extensions and capabilities detailed logs on init
@@ -211,14 +267,22 @@ index aea7df78..7d44077c 100644
  
  //#define RL_DEFAULT_BATCH_BUFFER_ELEMENTS    4096    // Default internal render batch elements limits
  #define RL_DEFAULT_BATCH_BUFFERS               1      // Default number of batch buffers (multi-buffering)
-@@ -126,6 +126,7 @@
+@@ -126,7 +126,6 @@
+ #define RL_DEFAULT_SHADER_SAMPLER2D_NAME_TEXTURE1  "texture1"          // texture1 (texture slot active 1)
+ #define RL_DEFAULT_SHADER_SAMPLER2D_NAME_TEXTURE2  "texture2"          // texture2 (texture slot active 2)
+ 
+-
  //------------------------------------------------------------------------------------
- // Module: shapes - Configuration Flags
+ // Module: rshapes - Configuration Flags
  //------------------------------------------------------------------------------------
+@@ -167,6 +166,7 @@
+ //------------------------------------------------------------------------------------
+ // Default font is loaded on window initialization to be available for the user to render simple text
+ // NOTE: If enabled, uses external module functions to load default raylib font
 +#define SUPPORT_FONT_TEXTURE        1
- // Use QUADS instead of TRIANGLES for drawing when possible
- // Some lines-based shapes could still use lines
- #define SUPPORT_QUADS_DRAW_MODE     1
+ #define SUPPORT_DEFAULT_FONT        1
+ // Selected desired font fileformats to be supported for loading
+ #define SUPPORT_FILEFORMAT_FNT      1
 diff --git a/src/rayspine.h b/src/rayspine.h
 new file mode 100644
 index 00000000..c0709efe
@@ -256,7 +320,7 @@ index 00000000..c0709efe
 +Texture2D *SpineCreateTexture2d(char *path);
 +void SpineTextureDestroy();
 diff --git a/src/rcore.c b/src/rcore.c
-index 3b451552..09b71ae7 100644
+index d90acf6c..16e0fdad 100644
 --- a/src/rcore.c
 +++ b/src/rcore.c
 @@ -11,6 +11,7 @@
@@ -267,7 +331,7 @@ index 3b451552..09b71ae7 100644
  *
  *   CONFIGURATION:
  *
-@@ -265,6 +266,15 @@
+@@ -290,6 +291,15 @@
      #include <emscripten/html5.h>       // Emscripten HTML5 library
  #endif
  
@@ -283,7 +347,7 @@ index 3b451552..09b71ae7 100644
  //----------------------------------------------------------------------------------
  // Defines and Macros
  //----------------------------------------------------------------------------------
-@@ -354,7 +364,7 @@ typedef struct CoreData {
+@@ -372,7 +382,7 @@ typedef struct CoreData {
  #if defined(PLATFORM_RPI)
          EGL_DISPMANX_WINDOW_T handle;       // Native window handle (graphic device)
  #endif
@@ -292,7 +356,7 @@ index 3b451552..09b71ae7 100644
  #if defined(PLATFORM_DRM)
          int fd;                             // File descriptor for /dev/dri/...
          drmModeConnector *connector;        // Direct Rendering Manager (DRM) mode connector
-@@ -472,7 +482,7 @@ typedef struct CoreData {
+@@ -491,7 +501,7 @@ typedef struct CoreData {
          double draw;                        // Time measure for frame draw
          double frame;                       // Time measure for one frame
          double target;                      // Desired time for one frame, if 0 not applied
@@ -301,14 +365,42 @@ index 3b451552..09b71ae7 100644
          unsigned long long base;            // Base time measure for hi-res timer
  #endif
          unsigned int frameCounter;          // Frame counter
-@@ -692,6 +702,40 @@ struct android_app *GetAndroidApp(void)
- }
- #endif
+@@ -721,6 +731,68 @@ struct android_app *GetAndroidApp(void)
  
+ // Initialize window and OpenGL context
+ // NOTE: data parameter could be used to pass any kind of required data to the initialization
 +#if defined(PLATFORM_VITA)
 +void InitWindow(int width, int height, const char *title)
 +{
 +    TRACELOG(LOG_INFO, "Initializing raylib %s", RAYLIB_VERSION);
++    TRACELOG(LOG_INFO, "Supported raylib modules:");
++    TRACELOG(LOG_INFO, "    > rcore:..... loaded (mandatory)");
++    TRACELOG(LOG_INFO, "    > rlgl:...... loaded (mandatory)");
++#if defined(SUPPORT_MODULE_RSHAPES)
++    TRACELOG(LOG_INFO, "    > rshapes:... loaded (optional)");
++#else
++    TRACELOG(LOG_INFO, "    > rshapes:... not loaded (optional)");
++#endif
++#if defined(SUPPORT_MODULE_RTEXTURES)
++    TRACELOG(LOG_INFO, "    > rtextures:. loaded (optional)");
++#else
++    TRACELOG(LOG_INFO, "    > rtextures:. not loaded (optional)");
++#endif
++#if defined(SUPPORT_MODULE_RTEXT)
++    TRACELOG(LOG_INFO, "    > rtext:..... loaded (optional)");
++#else
++    TRACELOG(LOG_INFO, "    > rtext:..... not loaded (optional)");
++#endif
++#if defined(SUPPORT_MODULE_RMODELS)
++    TRACELOG(LOG_INFO, "    > rmodels:... loaded (optional)");
++#else
++    TRACELOG(LOG_INFO, "    > rmodels:... not loaded (optional)");
++#endif
++#if defined(SUPPORT_MODULE_RAUDIO)
++    TRACELOG(LOG_INFO, "    > raudio:.... loaded (optional)");
++#else
++    TRACELOG(LOG_INFO, "    > raudio:.... not loaded (optional)");
++#endif
 +    if ((title != NULL) && (title[0] != 0)) CORE.Window.title = title;
 +    // Init hi-res timer
 +
@@ -339,19 +431,18 @@ index 3b451552..09b71ae7 100644
 +#endif
 +}
 +#else
- // Initialize window and OpenGL context
- // NOTE: data parameter could be used to pass any kind of required data to the initialization
  void InitWindow(int width, int height, const char *title)
-@@ -854,7 +898,7 @@ void InitWindow(int width, int height, const char *title)
+ {
+     TRACELOG(LOG_INFO, "Initializing raylib %s", RAYLIB_VERSION);
+@@ -925,6 +997,7 @@ void InitWindow(int width, int height, const char *title)
  
  #endif        // PLATFORM_DESKTOP || PLATFORM_WEB || PLATFORM_RPI || PLATFORM_DRM
  }
--
 +#endif
+ 
  // Close window and unload OpenGL context
  void CloseWindow(void)
- {
-@@ -882,7 +926,7 @@ void CloseWindow(void)
+@@ -953,7 +1026,7 @@ void CloseWindow(void)
      timeEndPeriod(1);           // Restore time period
  #endif
  
@@ -360,7 +451,7 @@ index 3b451552..09b71ae7 100644
      // Close surface, context and display
      if (CORE.Window.device != EGL_NO_DISPLAY)
      {
-@@ -1032,7 +1076,7 @@ bool WindowShouldClose(void)
+@@ -1103,7 +1176,7 @@ bool WindowShouldClose(void)
      else return true;
  #endif
  
@@ -369,7 +460,7 @@ index 3b451552..09b71ae7 100644
      if (CORE.Window.ready) return CORE.Window.shouldClose;
      else return true;
  #endif
-@@ -2643,6 +2687,9 @@ double GetTime(void)
+@@ -2754,6 +2827,9 @@ double GetTime(void)
  
      return (double)(time - CORE.Time.base)*1e-9;  // Elapsed time since InitTimer()
  #endif
@@ -379,7 +470,7 @@ index 3b451552..09b71ae7 100644
  }
  
  // Setup window configuration flags (view FLAGS)
-@@ -2888,9 +2935,11 @@ const char *GetWorkingDirectory(void)
+@@ -3029,9 +3105,11 @@ const char *GetWorkingDirectory(void)
  {
      static char currentDir[MAX_FILEPATH_LENGTH] = { 0 };
      memset(currentDir, 0, MAX_FILEPATH_LENGTH);
@@ -393,7 +484,7 @@ index 3b451552..09b71ae7 100644
      return path;
  }
  
-@@ -2948,8 +2997,11 @@ void ClearDirectoryFiles(void)
+@@ -3182,8 +3260,11 @@ void UnloadDirectoryFiles(FilePathList files)
  // Change working directory, returns true on success
  bool ChangeDirectory(const char *dir)
  {
@@ -406,7 +497,7 @@ index 3b451552..09b71ae7 100644
      if (result != 0) TRACELOG(LOG_WARNING, "SYSTEM: Failed to change to directory: %s", dir);
  
      return (result == 0);
-@@ -3698,6 +3750,171 @@ int GetTouchPointCount(void)
+@@ -3878,6 +3959,171 @@ int GetTouchPointCount(void)
  // NOTE: width and height represent the screen (framebuffer) desired size, not actual display size
  // If width or height are 0, default display size will be used for framebuffer size
  // NOTE: returns false in case graphic device could not be created
@@ -578,7 +669,7 @@ index 3b451552..09b71ae7 100644
  static bool InitGraphicsDevice(int width, int height)
  {
      CORE.Window.screen.width = width;            // User desired width
-@@ -4450,7 +4667,7 @@ static bool InitGraphicsDevice(int width, int height)
+@@ -4633,7 +4879,7 @@ static bool InitGraphicsDevice(int width, int height)
  
      return true;
  }
@@ -587,7 +678,7 @@ index 3b451552..09b71ae7 100644
  // Set viewport for a provided width and height
  static void SetupViewport(int width, int height)
  {
-@@ -4577,7 +4794,9 @@ static void InitTimer(void)
+@@ -4760,7 +5006,9 @@ static void InitTimer(void)
      }
      else TRACELOG(LOG_WARNING, "TIMER: Hi-resolution timer not available");
  #endif
@@ -598,7 +689,7 @@ index 3b451552..09b71ae7 100644
      CORE.Time.previous = GetTime();     // Get time as double
  }
  
-@@ -4635,7 +4854,7 @@ void SwapScreenBuffer(void)
+@@ -4815,7 +5063,7 @@ void SwapScreenBuffer(void)
      glfwSwapBuffers(CORE.Window.handle);
  #endif
  
@@ -608,10 +699,10 @@ index 3b451552..09b71ae7 100644
  
  #if defined(PLATFORM_DRM)
 diff --git a/src/rlgl.h b/src/rlgl.h
-index 4f9d8fa0..149ab6b2 100644
+index 123791a0..17221984 100644
 --- a/src/rlgl.h
 +++ b/src/rlgl.h
-@@ -4265,6 +4265,33 @@ static void rlLoadShaderDefault(void)
+@@ -4309,6 +4309,33 @@ static void rlLoadShaderDefault(void)
      for (int i = 0; i < RL_MAX_SHADER_LOCATIONS; i++) RLGL.State.defaultShaderLocs[i] = -1;
  
      // Vertex shader directly defined, no external file required
@@ -645,29 +736,28 @@ index 4f9d8fa0..149ab6b2 100644
      const char *defaultVShaderCode =
  #if defined(GRAPHICS_API_OPENGL_21)
      "#version 120                       \n"
-@@ -4336,7 +4363,7 @@ static void rlLoadShaderDefault(void)
+@@ -4379,6 +4406,7 @@ static void rlLoadShaderDefault(void)
+     "    vec4 texelColor = texture2D(texture0, fragTexCoord); \n"
      "    gl_FragColor = texelColor*colDiffuse*fragColor;      \n"
      "}                                  \n";
- #endif
--
 +#endif
-     // NOTE: Compiled vertex/fragment shaders are kept for re-use
-     RLGL.State.defaultVShaderId = rlCompileShader(defaultVShaderCode, GL_VERTEX_SHADER);     // Compile default vertex shader
-     RLGL.State.defaultFShaderId = rlCompileShader(defaultFShaderCode, GL_FRAGMENT_SHADER);   // Compile default fragment shader
+ #endif
+ 
+     // NOTE: Compiled vertex/fragment shaders are not deleted,
 diff --git a/src/rmodels.c b/src/rmodels.c
-index 8218a818..46b37bd6 100644
+index ee8b2117..d91eae36 100644
 --- a/src/rmodels.c
 +++ b/src/rmodels.c
-@@ -1095,7 +1095,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
-     mesh->vboId[1] = rlLoadVertexBuffer(mesh->texcoords, mesh->vertexCount*2*sizeof(float), dynamic);
-     rlSetVertexAttribute(1, 2, RL_FLOAT, 0, 0, 0);
-     rlEnableVertexAttribute(1);
+@@ -1102,7 +1102,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
+ 
+     // WARNING: When setting default vertex attribute values, the values for each generic vertex attribute
+     // is part of current state and it is maintained even if a different program object is used
 -
 +#if !defined(PLATFORM_VITA)
      if (mesh->normals != NULL)
      {
          // Enable vertex attributes: normals (shader-location = 2)
-@@ -1111,7 +1111,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
+@@ -1119,7 +1119,7 @@ void UploadMesh(Mesh *mesh, bool dynamic)
          rlSetVertexAttributeDefault(2, value, SHADER_ATTRIB_VEC3, 3);
          rlDisableVertexAttribute(2);
      }
@@ -676,7 +766,7 @@ index 8218a818..46b37bd6 100644
      if (mesh->colors != NULL)
      {
          // Enable vertex attribute: color (shader-location = 3)
-@@ -3741,11 +3741,12 @@ static Model LoadOBJ(const char *fileName)
+@@ -3747,11 +3747,12 @@ static Model LoadOBJ(const char *fileName)
          char currentDir[1024] = { 0 };
          strcpy(currentDir, GetWorkingDirectory());
          const char *workingDir = GetDirectoryPath(fileName);
@@ -690,7 +780,7 @@ index 8218a818..46b37bd6 100644
          unsigned int flags = TINYOBJ_FLAG_TRIANGULATE;
          int ret = tinyobj_parse_obj(&attrib, &meshes, &meshCount, &materials, &materialCount, fileText, dataSize, flags);
  
-@@ -3888,11 +3889,12 @@ static Model LoadOBJ(const char *fileName)
+@@ -3894,13 +3895,13 @@ static Model LoadOBJ(const char *fileName)
          RL_FREE(vtCount);
          RL_FREE(vnCount);
          RL_FREE(faceCount);
@@ -702,8 +792,10 @@ index 8218a818..46b37bd6 100644
          }
 +#endif
      }
- 
+-
      return model;
+ }
+ #endif
 diff --git a/src/rspine.c b/src/rspine.c
 new file mode 100644
 index 00000000..97f78020
@@ -966,7 +1058,7 @@ index 00000000..97f78020
 +	}
 +}
 diff --git a/src/utils.c b/src/utils.c
-index 215454cc..729766e7 100644
+index 9809e904..0deba5a7 100644
 --- a/src/utils.c
 +++ b/src/utils.c
 @@ -104,6 +104,166 @@ static int android_close(void *cookie);
@@ -1136,7 +1228,7 @@ index 215454cc..729766e7 100644
  void TraceLog(int logType, const char *text, ...)
  {
  #if defined(SUPPORT_TRACELOG)
-@@ -156,7 +316,7 @@ void TraceLog(int logType, const char *text, ...)
+@@ -157,7 +317,7 @@ void TraceLog(int logType, const char *text, ...)
  
  #endif  // SUPPORT_TRACELOG
  }
@@ -1146,7 +1238,7 @@ index 215454cc..729766e7 100644
  // NOTE: Initializes to zero by default
  void *MemAlloc(int size)
 diff --git a/src/utils.h b/src/utils.h
-index c9b33181..8a94af4e 100644
+index a2b3e03c..e0c51682 100644
 --- a/src/utils.h
 +++ b/src/utils.h
 @@ -31,7 +31,12 @@

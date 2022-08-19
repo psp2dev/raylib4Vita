@@ -4,7 +4,7 @@ raylib4Vita is a raylib port for PlayStation Vita
 Ready to have a lot of fun?
 - Install your vitasdk environment check https://vitasdk.org/ PIB library and piglet is needed
 - clone this repository and execute vita-makepkg
-- Install raylib4vita pkg with tar -C $VITASDK/arm-vita-eabi/ -xvf raylib4Vita-4.0.0-1-arm.tar.xz
+- Install raylib4vita pkg with tar -C $VITASDK/arm-vita-eabi/ -xvf raylib4Vita-4.2.0-1-arm.tar.xz
 
 
 <img align="left" src="https://github.com/raysan5/raylib/blob/master/logo/raylib_logo_animation.gif" width="288px">
@@ -23,6 +23,7 @@ Ready to learn?
 
  Change log
 ===========================
+ - 19/08/2022 public release using raylib 4.2.0 for vitasdk
  - 4/11/2021 public release using raylib 4.0.0 for vitasdk 
  - 9/5/2021 public release using raylib 3.7.0 for vitasdk 
  - 25/12/2020 Initial public release celebrating raylib 3.5.0 release 

@@ -1,15 +1,15 @@
 pkgname=raylib4Vita
-pkgver=4.0.0
+pkgver=4.2.0
 pkgrel=1
-gitrev=0851960397f02a477d80eda2239f90fae14dec64
+gitrev=35c777ef2ccdad0b3a94b508ec13df5f6cd9ea49
 url="https://github.com/raysan5/raylib/"
-source=("https://github.com/raysan5/raylib/archive/$gitrev.tar.gz" 'vitasdk_raylib_4.0.0.patch')
+source=("https://github.com/raysan5/raylib/archive/$gitrev.tar.gz" 'vitasdk_raylib_4.2.0.patch')
 sha256sums=(SKIP SKIP)
 
 prepare() {
   mv raylib-$gitrev $pkgname-$pkgver
   cd $pkgname-$pkgver
-  patch --strip=1 --input="${srcdir}/vitasdk_raylib_4.0.0.patch"
+  patch --strip=1 --input="${srcdir}/vitasdk_raylib_4.2.0.patch"
 }
 
 build() {
